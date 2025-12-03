@@ -2,9 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <!-- FIX: Added viewport-fit=cover for full screen usage on iPhone -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Финансовый План 2026</title>
+    <title>Финансы 2026</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,6 +13,65 @@
 
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let userId = null;
+        let unsubscribeSnapshot = null;
+
+        // Auth & Load Data
+        signInAnonymously(auth).then(() => {
+            console.log("Signed in anonymously");
+        }).catch((error) => {
+            console.error("Auth error", error);
+        });
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userId = user.uid;
+                loadData();
+            }
+        });
+
+        function loadData() {
+            if (!userId) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'financial_data', 'main_plan');
+            
+            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // Merge remote data with state, carefully to not break UI if empty
+                    if (data.state) {
+                        window.updateStateFromRemote(data.state);
+                    }
+                } else {
+                    // First time: save default state
+                    saveData(window.getCurrentState());
+                }
+            });
+        }
+
+        // Global function to save data (debounced in main script)
+        window.saveDataToFirebase = async (state) => {
+            if (!userId) return;
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'financial_data', 'main_plan');
+            try {
+                await setDoc(docRef, { state: state, lastUpdated: new Date() }, { merge: true });
+            } catch (e) {
+                console.error("Error saving document: ", e);
+            }
+        };
+    </script>
 
     <!-- Apple-style CSS -->
     <style>
@@ -98,21 +156,40 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+        /* Loader */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3498db;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 2s linear infinite; /* Safari */
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
-<body class="pb-12">
+<body class="pb-12 text-sm sm:text-base">
 
-    <!-- Sticky Header (Glass) + SAFE AREA FIX -->
-    <!-- Added pt-[env(safe-area-inset-top)] to handle the notch -->
+    <!-- Sticky Header -->
     <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50 pt-[env(safe-area-inset-top)] transition-all duration-200">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
             <div>
-                <h1 class="text-xl font-bold tracking-tight">Финансы 2026</h1>
+                <h1 class="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
+                    Финансы 2026
+                    <div id="sync-status" class="opacity-0 transition-opacity duration-500">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                    </div>
+                </h1>
                 <p class="text-xs text-gray-500 font-medium">Улан-Удэ</p>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Свободный поток</div>
-                <div id="header-balance" class="text-2xl font-bold text-blue-600 tracking-tight">0 ₽</div>
+                <div id="header-balance" class="text-xl sm:text-2xl font-bold text-blue-600 tracking-tight">0 ₽</div>
             </div>
         </div>
     </header>
@@ -205,14 +282,15 @@
                 </div>
             </section>
 
-            <!-- 3. Goals Section -->
+            <!-- 3. Goals Section (Fixed for Mobile) -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.3s;">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-bold">Цели</h2>
                     <button onclick="toggleAddGoal()" class="text-blue-600 text-sm font-semibold hover:opacity-70">+ Добавить</button>
                 </div>
                 
-                <div id="goals-list" class="space-y-3 custom-scroll max-h-[300px] overflow-y-auto pr-1">
+                <!-- FIX: max-h-none on mobile to prevent hiding content, max-h-[300px] on lg screens -->
+                <div id="goals-list" class="space-y-3 custom-scroll max-h-none lg:max-h-[300px] lg:overflow-y-auto pr-1">
                     <!-- Goals injected here -->
                 </div>
 
@@ -287,7 +365,7 @@
     </main>
 
     <script>
-        const state = {
+        let state = {
             incomes: [
                 { id: 'inc1', name: 'Зарплата', amount: 90000 },
                 { id: 'inc2', name: 'Детские', amount: 18000 }
@@ -309,9 +387,11 @@
             ]
         };
 
+        let isRemoteUpdate = false;
         const chartColors = ['#8E8E93', '#FF3B30', '#5AC8FA', '#34C759', '#FF9500', '#5856D6'];
         let mainChart = null;
         let doughnutChart = null;
+        let saveTimeout = null;
 
         const els = {
             incomesList: document.getElementById('income-list'),
@@ -323,6 +403,7 @@
             goalsCost: document.getElementById('goals-cost-val'),
             finalBalance: document.getElementById('final-balance-val'),
             analysisText: document.getElementById('analysis-text'),
+            syncStatus: document.getElementById('sync-status'),
             inputs: {
                 food: document.getElementById('input-food'),
                 utilities: document.getElementById('input-utilities'),
@@ -341,11 +422,48 @@
             }
         };
 
+        // Exposed functions for Firebase module
+        window.getCurrentState = () => state;
+        window.updateStateFromRemote = (newState) => {
+            if (!newState) return;
+            isRemoteUpdate = true;
+            state = newState;
+            
+            // Update UI inputs to match new state
+            Object.keys(state.expenses).forEach(key => {
+                if(els.inputs[key]) els.inputs[key].value = state.expenses[key];
+            });
+            
+            init();
+            isRemoteUpdate = false;
+        };
+
         function init() {
             renderIncomes();
             renderGoals();
-            setupExpenseListeners();
+            setupExpenseListeners(); // ensures listeners are attached
             updateAll();
+        }
+
+        // --- DEBOUNCED SAVE ---
+        function triggerSave() {
+            if (isRemoteUpdate) return;
+            
+            // Visual feedback
+            els.syncStatus.classList.add('opacity-100');
+            els.syncStatus.firstElementChild.classList.remove('bg-green-500');
+            els.syncStatus.firstElementChild.classList.add('bg-yellow-500');
+
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                if (window.saveDataToFirebase) {
+                    window.saveDataToFirebase(state).then(() => {
+                        els.syncStatus.firstElementChild.classList.remove('bg-yellow-500');
+                        els.syncStatus.firstElementChild.classList.add('bg-green-500');
+                        setTimeout(() => els.syncStatus.classList.remove('opacity-100'), 1000);
+                    });
+                }
+            }, 1000); // Wait 1 sec after last change
         }
 
         function renderIncomes() {
@@ -390,29 +508,33 @@
                             </div>
                         </div>
                     </div>
-                    ${goal.id === 'car' ? '<span class="text-xs text-red-400 font-bold px-2 py-0.5 bg-red-50 rounded">Сложно</span>' : ''}
+                    ${goal.id === 'car' ? '<span class="text-xs text-red-400 font-bold px-2 py-0.5 bg-red-50 rounded hidden sm:inline-block">Сложно</span>' : ''}
+                    <button onclick="removeGoal(${idx})" class="text-gray-300 hover:text-red-400 ml-1">×</button>
                 `;
                 els.goalsList.appendChild(div);
             });
         }
 
-        function updateIncome(idx, val) {
+        // --- ACTIONS ---
+
+        window.updateIncome = (idx, val) => {
             state.incomes[idx].amount = parseInt(val) || 0;
             updateAll();
-        }
+            triggerSave();
+        };
 
-        function removeIncome(idx) {
+        window.removeIncome = (idx) => {
             state.incomes.splice(idx, 1);
             renderIncomes();
             updateAll();
-        }
+            triggerSave();
+        };
 
-        function toggleAddIncome() {
-            const form = document.getElementById('add-income-form');
-            form.classList.toggle('hidden');
-        }
+        window.toggleAddIncome = () => {
+            document.getElementById('add-income-form').classList.toggle('hidden');
+        };
 
-        function addIncome() {
+        window.addIncome = () => {
             const name = document.getElementById('new-income-name').value;
             const amount = parseInt(document.getElementById('new-income-amount').value);
             if(name && amount) {
@@ -422,35 +544,46 @@
                 toggleAddIncome();
                 document.getElementById('new-income-name').value = '';
                 document.getElementById('new-income-amount').value = '';
+                triggerSave();
             }
-        }
+        };
 
         function setupExpenseListeners() {
             Object.keys(els.inputs).forEach(key => {
+                // Remove old listeners to prevent duplicates if re-init
+                const oldElement = els.inputs[key];
+                const newElement = oldElement.cloneNode(true);
+                oldElement.parentNode.replaceChild(newElement, oldElement);
+                els.inputs[key] = newElement;
+
                 els.inputs[key].addEventListener('input', (e) => {
                     state.expenses[key] = parseInt(e.target.value);
                     els.displays[key].innerText = formatCurrency(state.expenses[key]);
                     updateAll();
+                    triggerSave();
                 });
+                // Set initial value for display
+                els.displays[key].innerText = formatCurrency(state.expenses[key]);
             });
         }
 
-        function toggleGoal(idx, isActive) {
+        window.toggleGoal = (idx, isActive) => {
             state.goals[idx].active = isActive;
             updateAll();
-        }
+            triggerSave();
+        };
 
-        function updateGoalCost(idx, val) {
+        window.updateGoalCost = (idx, val) => {
             state.goals[idx].cost = parseInt(val) || 0;
             updateAll();
-        }
+            triggerSave();
+        };
 
-        function toggleAddGoal() {
-            const form = document.getElementById('add-goal-form');
-            form.classList.toggle('hidden');
-        }
+        window.toggleAddGoal = () => {
+            document.getElementById('add-goal-form').classList.toggle('hidden');
+        };
 
-        function addGoal() {
+        window.addGoal = () => {
             const name = document.getElementById('new-goal-name').value;
             const cost = parseInt(document.getElementById('new-goal-cost').value);
             if(name && cost) {
@@ -466,8 +599,16 @@
                 toggleAddGoal();
                 document.getElementById('new-goal-name').value = '';
                 document.getElementById('new-goal-cost').value = '';
+                triggerSave();
             }
-        }
+        };
+
+        window.removeGoal = (idx) => {
+            state.goals.splice(idx, 1);
+            renderGoals();
+            updateAll();
+            triggerSave();
+        };
 
         function updateAll() {
             const totalIncome = state.incomes.reduce((sum, item) => sum + item.amount, 0);
@@ -478,8 +619,8 @@
             els.totalExpense.innerText = formatCurrency(totalExpense);
             els.headerBalance.innerText = formatCurrency(monthlySavings);
             els.headerBalance.className = monthlySavings >= 0 
-                ? "text-2xl font-bold text-blue-600 tracking-tight" 
-                : "text-2xl font-bold text-red-500 tracking-tight";
+                ? "text-xl sm:text-2xl font-bold text-blue-600 tracking-tight" 
+                : "text-xl sm:text-2xl font-bold text-red-500 tracking-tight";
 
             const yearSavings = monthlySavings * 12;
             const activeGoals = state.goals.filter(g => g.active);
@@ -645,7 +786,9 @@
             return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(num);
         }
 
+        // Initial Local Load
         init();
+
     </script>
 </body>
 </html>
