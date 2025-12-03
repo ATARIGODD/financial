@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Финансы: Расширенный</title>
+    <title>Финансы</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,13 +12,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
@@ -28,6 +28,7 @@
 
         let userId = null;
 
+        // AUTH FLOW
         const initAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -35,658 +36,714 @@
                 } else {
                     await signInAnonymously(auth);
                 }
-            } catch (error) {
-                console.error("Auth error:", error);
-            }
+            } catch (e) { console.error(e); }
         };
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 userId = user.uid;
-                startRealtimeListener();
+                startListeners();
             }
         });
 
-        function startRealtimeListener() {
+        // DATA SYNC
+        function startListeners() {
             if (!userId) return;
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'financial_plan_v2');
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'finance_hub_v3');
             
             onSnapshot(docRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     if (data.state && !window.isSaving) {
-                        window.updateStateFromRemote(data.state);
+                        window.syncState(data.state);
                     }
                 }
             });
         }
 
-        window.saveDataToFirebase = async (state) => {
+        // SAVING
+        window.saveToCloud = async (state) => {
             if (!userId) return;
             window.isSaving = true;
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'financial_plan_v2');
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'finance_hub_v3');
             try {
                 await setDoc(docRef, { state: state, lastUpdated: new Date() }, { merge: true });
-            } catch (e) {
-                console.error("Save error:", e);
-            } finally {
-                setTimeout(() => { window.isSaving = false; }, 500);
-            }
+            } catch(e) { console.error(e); }
+            finally { setTimeout(() => window.isSaving = false, 500); }
         };
 
         initAuth();
     </script>
 
     <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.8);
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #F5F5F7;
-            color: #1D1D1F;
+            font-family: 'Inter', sans-serif;
+            background: #f0f2f5;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+            background-attachment: fixed;
+            background-size: cover;
+            color: #1e293b;
             -webkit-font-smoothing: antialiased;
         }
 
-        .ios-card {
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 20px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            transition: transform 0.2s ease;
+        /* Glassmorphism Card */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        .ios-input {
-            background: #F2F2F7;
-            border: none;
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-size: 15px;
-            transition: background 0.2s;
-            width: 100%;
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.12);
         }
-        .ios-input:focus {
-            background: #E5E5EA;
+
+        /* Inputs */
+        .modern-input {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(209, 213, 219, 0.5);
+            border-radius: 12px;
+            padding: 10px 16px;
+            transition: all 0.2s;
+        }
+        .modern-input:focus {
+            background: #fff;
             outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+        }
+
+        /* Animations */
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
-        input[type=range] {
-            -webkit-appearance: none;
-            width: 100%;
-            background: transparent;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 24px;
-            width: 24px;
-            border-radius: 50%;
-            background: #FFFFFF;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-            margin-top: -10px;
-            cursor: pointer;
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #E5E5EA;
-            border-radius: 2px;
+        .animate-enter {
+            animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
         }
 
-        .toggle-checkbox:checked { right: 0; border-color: #007AFF; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #007AFF; }
-        
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background-color: #D1D1D6; border-radius: 3px; }
+        .stagger-1 { animation-delay: 0.1s; }
+        .stagger-2 { animation-delay: 0.2s; }
+        .stagger-3 { animation-delay: 0.3s; }
 
-        .chart-container { position: relative; width: 100%; height: 320px; }
+        /* Custom Scrollbar */
+        .scroller::-webkit-scrollbar { width: 4px; }
+        .scroller::-webkit-scrollbar-track { background: transparent; }
+        .scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        /* Chat Bubbles */
+        .chat-bubble {
+            position: relative;
+            padding: 10px 16px;
+            border-radius: 18px;
+            max-width: 85%;
+            font-size: 14px;
+            line-height: 1.4;
+            animation: slideInUp 0.3s ease-out;
+        }
+        .chat-self {
+            background: var(--primary-gradient);
+            color: white;
+            border-bottom-right-radius: 4px;
+            margin-left: auto;
+        }
+        .chat-other {
+            background: white;
+            color: #334155;
+            border-bottom-left-radius: 4px;
+            margin-right: auto;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
     </style>
 </head>
-<body class="pb-12 text-sm sm:text-base opacity-0 transition-opacity duration-500" onload="document.body.style.opacity='1'">
+<body class="min-h-screen pb-10">
 
-    <!-- Header -->
-    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50 pt-[env(safe-area-inset-top)] transition-all duration-200">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div>
-                    <h1 class="text-lg sm:text-xl font-bold tracking-tight">Финансы 2026</h1>
-                    <div class="flex items-center gap-1">
-                        <p class="text-xs text-gray-500 font-medium">Улан-Удэ</p>
-                        <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-300 ml-1 transition-colors duration-300"></span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-4">
-                <button onclick="forceSave()" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-all flex items-center gap-1 active:scale-95">
-                    <span id="save-btn-text">Сохранить</span>
-                </button>
-            </div>
+    <!-- Auth Overlay -->
+    <div id="auth-overlay" class="fixed inset-0 z-[60] bg-black/40 backdrop-blur-md flex items-center justify-center transition-opacity duration-300">
+        <div class="glass-card p-8 w-full max-w-sm text-center transform scale-100 transition-transform duration-300" id="auth-box">
+            <h2 class="text-2xl font-bold mb-2">Добро пожаловать</h2>
+            <p class="text-sm text-gray-500 mb-6">Представьтесь, чтобы синхронизировать данные</p>
+            <input type="text" id="username-input" placeholder="Ваше имя" class="modern-input w-full text-center text-lg mb-4" autocomplete="off">
+            <button onclick="login()" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all active:scale-95">
+                Войти
+            </button>
         </div>
-    </header>
+    </div>
 
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- LEFT COLUMN -->
-        <div class="lg:col-span-5 space-y-6">
-
-            <!-- 1. Income -->
-            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold">Доходы</h2>
-                    <span id="total-income-display" class="text-sm font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-lg">108 000 ₽</span>
+    <!-- Main App -->
+    <div id="app-container" class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 opacity-0 transition-opacity duration-500 filter blur-sm">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 animate-enter">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white tracking-tight drop-shadow-sm">Финансы</h1>
+                <div class="flex items-center gap-2 mt-1">
+                    <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <p class="text-white/80 text-sm font-medium" id="date-display">Загрузка даты...</p>
                 </div>
-                <div id="income-list" class="space-y-3 mb-4"></div>
-                <button onclick="toggleAddIncome()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">+ Источник</button>
-                <div id="add-income-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
-                    <input type="text" id="new-income-name" placeholder="Название" class="ios-input bg-white">
-                    <input type="number" id="new-income-amount" placeholder="Сумма" class="ios-input bg-white">
-                    <div class="flex space-x-2 pt-1">
-                        <button onclick="addIncome()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">ОК</button>
-                        <button onclick="toggleAddIncome()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
-                    </div>
+            </div>
+            <div class="mt-4 md:mt-0 glass-card px-6 py-3 flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-xs text-gray-500 uppercase font-bold tracking-wider">Баланс (Год)</p>
+                    <p id="global-balance" class="text-xl font-bold text-gray-800">0 ₽</p>
                 </div>
-            </section>
-
-            <!-- 2. Expenses -->
-            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.2s;">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold">Расходы</h2>
-                    <span id="total-expense-display" class="text-sm font-semibold text-gray-500">0 ₽</span>
+                <div class="h-8 w-px bg-gray-300"></div>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs" id="user-avatar">?</div>
+                    <span id="user-name-display" class="text-sm font-semibold text-gray-700">Гость</span>
                 </div>
+            </div>
+        </header>
 
-                <!-- Fixed Sliders -->
-                <div class="space-y-6 mb-6">
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">🛒 Продукты и быт</span><span id="val-food" class="text-gray-600 font-semibold">35 000 ₽</span></div>
-                        <input type="range" min="15000" max="60000" step="1000" value="35000" id="input-food" class="accent-blue-500">
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-medium text-red-500">🔥 Дом (Отопление)</span><span id="val-utilities" class="text-gray-600 font-semibold">15 000 ₽</span></div>
-                        <input type="range" min="3000" max="35000" step="500" value="15000" id="input-utilities" class="accent-red-500">
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">👶 Ребенок</span><span id="val-child" class="text-gray-600 font-semibold">10 000 ₽</span></div>
-                        <input type="range" min="5000" max="30000" step="1000" value="10000" id="input-child" class="accent-blue-500">
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">🚗 Прочее</span><span id="val-misc" class="text-gray-600 font-semibold">7 000 ₽</span></div>
-                        <input type="range" min="2000" max="25000" step="500" value="7000" id="input-misc" class="accent-blue-500">
-                    </div>
-                </div>
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                <!-- Custom Expenses List -->
-                <div class="border-t border-gray-100 pt-4">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-3">Дополнительные траты</h3>
-                    <div id="custom-expenses-list" class="space-y-3 mb-4"></div>
-                    
-                    <button onclick="toggleAddExpense()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">+ Добавить расход</button>
-                    
-                    <div id="add-expense-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
-                        <input type="text" id="new-exp-name" placeholder="Название (напр. Кредит)" class="ios-input bg-white">
-                        <div class="flex space-x-2">
-                            <input type="number" id="new-exp-amount" placeholder="Сумма" class="ios-input bg-white w-2/3">
-                            <input type="number" id="new-exp-duration" placeholder="Мес" value="12" class="ios-input bg-white w-1/3 text-center" title="Длительность в месяцах (1-12)">
+            <!-- LEFT: Editor Column -->
+            <div class="lg:col-span-5 space-y-6">
+
+                <!-- Income Card -->
+                <section class="glass-card p-6 animate-enter stagger-1">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            <span class="p-1.5 bg-green-100 text-green-600 rounded-lg text-lg">💰</span>
+                            Доходы
+                        </h2>
+                        <button onclick="toggleForm('income')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition">+</button>
+                    </div>
+
+                    <div id="income-list" class="space-y-3 max-h-[300px] overflow-y-auto scroller pr-2">
+                        <!-- Dynamic Content -->
+                    </div>
+
+                    <!-- Add Form -->
+                    <div id="form-income" class="hidden mt-4 pt-4 border-t border-gray-100/50">
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <input id="inc-name" type="text" placeholder="Название" class="modern-input col-span-2">
+                            <input id="inc-amount" type="number" placeholder="Сумма" class="modern-input">
+                            <select id="inc-type" class="modern-input appearance-none bg-white">
+                                <option value="monthly">Ежемесячно</option>
+                                <option value="once">Разово</option>
+                            </select>
                         </div>
-                        <p class="text-[10px] text-gray-400 pl-1">Укажите "12" для постоянного расхода, или меньше для временного (кредит, рассрочка).</p>
-                        <div class="flex space-x-2 pt-1">
-                            <button onclick="addCustomExpense()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">Добавить</button>
-                            <button onclick="toggleAddExpense()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
+                        <button onclick="addIncome()" class="w-full py-2 bg-black text-white rounded-lg font-medium text-sm hover:opacity-90">Добавить доход</button>
+                    </div>
+                </section>
+
+                <!-- Expenses Card -->
+                <section class="glass-card p-6 animate-enter stagger-2">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            <span class="p-1.5 bg-red-100 text-red-600 rounded-lg text-lg">💸</span>
+                            Расходы
+                        </h2>
+                        <button onclick="toggleForm('expense')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition">+</button>
+                    </div>
+
+                    <div id="expense-list" class="space-y-3 max-h-[400px] overflow-y-auto scroller pr-2">
+                        <!-- Dynamic Content -->
+                    </div>
+
+                    <!-- Add Form -->
+                    <div id="form-expense" class="hidden mt-4 pt-4 border-t border-gray-100/50">
+                        <div class="space-y-3 mb-3">
+                            <input id="exp-name" type="text" placeholder="Название (напр. Аренда)" class="modern-input w-full">
+                            <div class="grid grid-cols-3 gap-3">
+                                <input id="exp-amount" type="number" placeholder="Сумма" class="modern-input col-span-2">
+                                <input id="exp-duration" type="number" placeholder="Мес" value="12" class="modern-input text-center" title="Длительность (мес)">
+                            </div>
                         </div>
+                        <p class="text-[10px] text-gray-500 mb-2 px-1">Укажите 12 для постоянных трат, 1 для разовых.</p>
+                        <button onclick="addExpense()" class="w-full py-2 bg-black text-white rounded-lg font-medium text-sm hover:opacity-90">Добавить расход</button>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- 3. Goals -->
-            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.3s;">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold">Цели</h2>
-                    <button onclick="toggleAddGoal()" class="text-blue-600 text-sm font-semibold hover:opacity-70">+ Цель</button>
-                </div>
-                <div id="goals-list" class="space-y-3 custom-scroll max-h-none lg:max-h-[300px] lg:overflow-y-auto pr-1"></div>
-                <div id="add-goal-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
-                    <input type="text" id="new-goal-name" placeholder="Название цели" class="ios-input bg-white">
-                    <input type="number" id="new-goal-cost" placeholder="Стоимость" class="ios-input bg-white">
-                    <div class="flex space-x-2 pt-1">
-                        <button onclick="addGoal()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">ОК</button>
-                        <button onclick="toggleAddGoal()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
+                <!-- Goals Card -->
+                <section class="glass-card p-6 animate-enter stagger-3">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            <span class="p-1.5 bg-blue-100 text-blue-600 rounded-lg text-lg">🎯</span>
+                            Цели
+                        </h2>
+                        <button onclick="toggleForm('goal')" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition">+</button>
                     </div>
-                </div>
-            </section>
 
-        </div>
+                    <div id="goal-list" class="space-y-3"></div>
 
-        <!-- RIGHT COLUMN -->
-        <div class="lg:col-span-7 space-y-6">
-
-            <!-- Chart -->
-            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h2 class="text-lg font-bold mb-1">Прогноз 2026</h2>
-                        <p class="text-sm text-gray-500">Динамика накоплений</p>
+                    <div id="form-goal" class="hidden mt-4 pt-4 border-t border-gray-100/50">
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <input id="goal-name" type="text" placeholder="Название цели" class="modern-input col-span-2">
+                            <input id="goal-cost" type="number" placeholder="Стоимость" class="modern-input col-span-2">
+                        </div>
+                        <button onclick="addGoal()" class="w-full py-2 bg-black text-white rounded-lg font-medium text-sm hover:opacity-90">Добавить цель</button>
                     </div>
-                    <div class="text-right">
-                         <div class="text-[10px] text-gray-400 uppercase font-semibold">Средний поток</div>
-                         <div id="avg-flow-display" class="text-lg font-bold text-blue-600">0 ₽</div>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="mainChart"></canvas>
-                </div>
-                <div class="mt-4 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-                    <h4 class="text-sm font-bold text-blue-900 mb-1">Вердикт</h4>
-                    <p id="analysis-text" class="text-sm text-blue-800 opacity-90">Загрузка...</p>
-                </div>
-            </section>
+                </section>
 
-            <!-- Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in" style="animation-delay: 0.2s;">
-                <div class="ios-card p-6 flex flex-col items-center">
-                    <h3 class="text-sm font-semibold text-gray-500 mb-4 w-full text-left">Структура (Январь)</h3>
-                    <div style="height: 180px; width: 100%;"><canvas id="doughnutChart"></canvas></div>
-                </div>
-                <div class="ios-card p-6 flex flex-col justify-center space-y-4">
-                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Накопления за год</div><div id="year-savings-val" class="text-2xl font-bold text-gray-900">0 ₽</div></div>
-                    <div class="w-full h-px bg-gray-100"></div>
-                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Стоимость целей</div><div id="goals-cost-val" class="text-2xl font-bold text-gray-900">0 ₽</div></div>
-                    <div class="w-full h-px bg-gray-100"></div>
-                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Баланс</div><div id="final-balance-val" class="text-2xl font-bold">0 ₽</div></div>
-                </div>
             </div>
 
-        </div>
+            <!-- RIGHT: Visualization & Chat -->
+            <div class="lg:col-span-7 space-y-6">
 
-    </main>
+                <!-- Chart Section -->
+                <section class="glass-card p-6 animate-enter stagger-1 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                        <svg width="200" height="200" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h2 class="text-xl font-bold mb-1">Финансовый Прогноз</h2>
+                        <p class="text-sm text-gray-500" id="forecast-subtitle">Динамика на следующие 12 месяцев</p>
+                    </div>
+
+                    <div class="relative h-[300px] w-full">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                    
+                    <div class="mt-4 flex gap-4 overflow-x-auto pb-2">
+                        <div class="flex-shrink-0 bg-white/50 px-4 py-2 rounded-xl border border-white">
+                            <div class="text-[10px] text-gray-500 uppercase font-bold">Остаток в конце</div>
+                            <div id="stat-end-balance" class="font-bold text-lg text-gray-800">...</div>
+                        </div>
+                        <div class="flex-shrink-0 bg-white/50 px-4 py-2 rounded-xl border border-white">
+                            <div class="text-[10px] text-gray-500 uppercase font-bold">Всего доходы</div>
+                            <div id="stat-total-inc" class="font-bold text-lg text-green-600">...</div>
+                        </div>
+                         <div class="flex-shrink-0 bg-white/50 px-4 py-2 rounded-xl border border-white">
+                            <div class="text-[10px] text-gray-500 uppercase font-bold">Всего расходы</div>
+                            <div id="stat-total-exp" class="font-bold text-lg text-red-500">...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Family Wall (Chat) -->
+                <section class="glass-card flex flex-col h-[400px] animate-enter stagger-2">
+                    <div class="p-4 border-b border-gray-200/50 flex justify-between items-center bg-white/40 rounded-t-2xl">
+                        <h2 class="font-bold text-gray-800 flex items-center gap-2">
+                            💬 Стена
+                        </h2>
+                        <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-full">Семейный чат</span>
+                    </div>
+
+                    <!-- Messages Area -->
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 scroller flex flex-col-reverse">
+                        <!-- Messages injected here bottom-up -->
+                        <div class="text-center text-xs text-gray-400 py-4">Нет сообщений. Напишите первое!</div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="p-3 bg-white/60 border-t border-gray-200/50 rounded-b-2xl flex gap-2">
+                        <input id="chat-input" type="text" placeholder="Напишите сообщение..." class="modern-input flex-1 bg-white text-sm" onkeypress="handleChatKey(event)">
+                        <button onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
+                </section>
+
+            </div>
+
+        </main>
+    </div>
 
     <script>
-        // --- STATE ---
-        let state = {
-            incomes: [
-                { id: 'inc1', name: 'Зарплата', amount: 90000 },
-                { id: 'inc2', name: 'Детские', amount: 18000 }
-            ],
-            expenses: { // Fixed sliders
-                food: 35000,
-                utilities: 15000,
-                child: 10000,
-                misc: 7000
-            },
-            customExpenses: [], // New Array: {id, name, amount, duration}
-            goals: [
-                { id: 'electricity', name: '⚡ Свет (3 фазы)', cost: 55000, active: true, color: '#007AFF' },
-                { id: 'sewage', name: '💧 Канализация', cost: 120000, active: true, color: '#5856D6' },
-                { id: 'walls', name: '🧱 Ремонт стен', cost: 60000, active: true, color: '#FF9500' },
-                { id: 'car', name: '🚗 Машина', cost: 650000, active: true, color: '#FF3B30' }
-            ]
+        // --- LOGIC ---
+        
+        let currentState = {
+            incomes: [],
+            expenses: [],
+            goals: [],
+            messages: []
         };
+        
+        let chartInstance = null;
+        let userName = localStorage.getItem('finance_user_name') || null;
 
-        window.isSaving = false;
-        let saveTimeout = null;
-        let mainChart = null;
-        let doughnutChart = null;
-
-        const els = {
-            incomesList: document.getElementById('income-list'),
-            customExpensesList: document.getElementById('custom-expenses-list'),
-            goalsList: document.getElementById('goals-list'),
-            totalIncome: document.getElementById('total-income-display'),
-            totalExpense: document.getElementById('total-expense-display'),
-            avgFlow: document.getElementById('avg-flow-display'),
-            yearSavings: document.getElementById('year-savings-val'),
-            goalsCost: document.getElementById('goals-cost-val'),
-            finalBalance: document.getElementById('final-balance-val'),
-            analysisText: document.getElementById('analysis-text'),
-            saveBtnText: document.getElementById('save-btn-text'),
-            syncDot: document.getElementById('sync-dot'),
-            inputs: {
-                food: document.getElementById('input-food'),
-                utilities: document.getElementById('input-utilities'),
-                child: document.getElementById('input-child'),
-                misc: document.getElementById('input-misc'),
-            },
-            displays: {
-                food: document.getElementById('val-food'),
-                utilities: document.getElementById('val-utilities'),
-                child: document.getElementById('val-child'),
-                misc: document.getElementById('val-misc'),
-            }
-        };
-
-        // --- CORE FUNCTIONS ---
-
-        window.updateStateFromRemote = (newState) => {
-            if (!newState) return;
-            state = newState;
-            // Ensure customExpenses exists (migration)
-            if (!state.customExpenses) state.customExpenses = [];
-            
-            // Sync UI
-            Object.keys(state.expenses).forEach(key => {
-                if(els.inputs[key]) {
-                    els.inputs[key].value = state.expenses[key];
-                    if(els.displays[key]) els.displays[key].innerText = formatCurrency(state.expenses[key]);
-                }
-            });
-            renderAll();
-            indicateSync('green');
-        };
-
-        function init() {
-            renderAll();
-            setupSliderListeners();
-        }
-
-        function triggerAutoSave() {
-            indicateSync('yellow');
-            if (saveTimeout) clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(() => {
-                if (window.saveDataToFirebase) {
-                    window.saveDataToFirebase(state).then(() => indicateSync('green'));
-                }
-            }, 1000);
-        }
-
-        window.forceSave = () => {
-            if (window.saveDataToFirebase) {
-                els.saveBtnText.innerText = 'Запись...';
-                window.saveDataToFirebase(state).then(() => {
-                    els.saveBtnText.innerText = 'Готово';
-                    indicateSync('green');
-                    setTimeout(() => els.saveBtnText.innerText = 'Сохранить', 1500);
-                });
-            }
-        };
-
-        function indicateSync(color) {
-            els.syncDot.className = `w-2 h-2 rounded-full ml-1 transition-colors duration-300 ${color === 'yellow' ? 'bg-yellow-400' : 'bg-green-500'}`;
-        }
-
-        function renderAll() {
-            renderIncomes();
-            renderCustomExpenses();
-            renderGoals();
-            calculateAndDraw();
-        }
-
-        // --- RENDERERS ---
-
-        function renderIncomes() {
-            els.incomesList.innerHTML = '';
-            state.incomes.forEach((inc, idx) => {
-                els.incomesList.innerHTML += `
-                    <div class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                        <div class="flex-1">
-                            <div class="text-xs text-gray-400 font-medium uppercase">${inc.name}</div>
-                            <input type="number" value="${inc.amount}" onchange="updateIncome(${idx}, this.value)" class="font-semibold text-gray-800 w-full focus:outline-none bg-transparent">
-                        </div>
-                        <button onclick="removeIncome(${idx})" class="text-gray-300 hover:text-red-500 ml-2">×</button>
-                    </div>`;
-            });
-        }
-
-        function renderCustomExpenses() {
-            els.customExpensesList.innerHTML = '';
-            if (state.customExpenses.length === 0) {
-                els.customExpensesList.innerHTML = '<p class="text-xs text-gray-400 italic">Нет дополнительных расходов</p>';
-                return;
-            }
-            state.customExpenses.forEach((exp, idx) => {
-                const isTemp = exp.duration < 12;
-                const badge = isTemp ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-2">${exp.duration} мес</span>` : '';
-                els.customExpensesList.innerHTML += `
-                    <div class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                        <div class="flex-1">
-                            <div class="flex items-center">
-                                <span class="text-sm font-medium text-gray-700">${exp.name}</span>
-                                ${badge}
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <input type="number" value="${exp.amount}" onchange="updateCustomExp(${idx}, 'amount', this.value)" class="text-xs font-semibold text-gray-500 w-16 focus:outline-none bg-transparent border-b border-transparent focus:border-blue-300">
-                                <span class="text-xs text-gray-400">₽</span>
-                            </div>
-                        </div>
-                        <button onclick="removeCustomExp(${idx})" class="text-gray-300 hover:text-red-500 ml-2">×</button>
-                    </div>`;
-            });
-        }
-
-        function renderGoals() {
-            els.goalsList.innerHTML = '';
-            state.goals.forEach((goal, idx) => {
-                const id = `goal-${idx}`;
-                els.goalsList.innerHTML += `
-                    <div class="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
-                        <div class="flex items-center flex-1 mr-2">
-                            <input type="checkbox" ${goal.active ? 'checked' : ''} onchange="toggleGoal(${idx}, this.checked)" class="toggle-checkbox w-5 h-5 rounded-full border-gray-300 text-blue-600 mr-3">
-                            <div class="min-w-0">
-                                <div class="text-sm font-medium truncate">${goal.name}</div>
-                                <input type="number" value="${goal.cost}" onchange="updateGoalCost(${idx}, this.value)" class="text-xs text-gray-500 w-20 bg-transparent focus:outline-none">
-                            </div>
-                        </div>
-                        <button onclick="removeGoal(${idx})" class="text-gray-300 hover:text-red-400">×</button>
-                    </div>`;
-            });
-        }
-
-        // --- ACTIONS ---
-
-        // Incomes
-        window.updateIncome = (idx, val) => { state.incomes[idx].amount = parseInt(val) || 0; renderAll(); triggerAutoSave(); };
-        window.removeIncome = (idx) => { state.incomes.splice(idx, 1); renderAll(); triggerAutoSave(); };
-        window.toggleAddIncome = () => document.getElementById('add-income-form').classList.toggle('hidden');
-        window.addIncome = () => {
-            const name = document.getElementById('new-income-name').value;
-            const amount = parseInt(document.getElementById('new-income-amount').value);
-            if(name && amount) {
-                state.incomes.push({ id: Date.now(), name, amount });
-                renderAll(); toggleAddIncome(); triggerAutoSave();
-            }
-        };
-
-        // Custom Expenses
-        window.updateCustomExp = (idx, field, val) => { 
-            state.customExpenses[idx][field] = parseInt(val) || 0; 
-            renderAll(); triggerAutoSave(); 
-        };
-        window.removeCustomExp = (idx) => { state.customExpenses.splice(idx, 1); renderAll(); triggerAutoSave(); };
-        window.toggleAddExpense = () => document.getElementById('add-expense-form').classList.toggle('hidden');
-        window.addCustomExpense = () => {
-            const name = document.getElementById('new-exp-name').value;
-            const amount = parseInt(document.getElementById('new-exp-amount').value);
-            let duration = parseInt(document.getElementById('new-exp-duration').value);
-            if (!duration || duration > 12) duration = 12;
-            
-            if(name && amount) {
-                if (!state.customExpenses) state.customExpenses = [];
-                state.customExpenses.push({ id: Date.now(), name, amount, duration });
-                renderAll(); toggleAddExpense(); triggerAutoSave();
-            }
-        };
-
-        // Goals
-        window.toggleGoal = (idx, val) => { state.goals[idx].active = val; renderAll(); triggerAutoSave(); };
-        window.updateGoalCost = (idx, val) => { state.goals[idx].cost = parseInt(val) || 0; renderAll(); triggerAutoSave(); };
-        window.removeGoal = (idx) => { state.goals.splice(idx, 1); renderAll(); triggerAutoSave(); };
-        window.toggleAddGoal = () => document.getElementById('add-goal-form').classList.toggle('hidden');
-        window.addGoal = () => {
-            const name = document.getElementById('new-goal-name').value;
-            const cost = parseInt(document.getElementById('new-goal-cost').value);
-            if(name && cost) {
-                state.goals.push({ id: Date.now(), name, cost, active: true, color: '#999' });
-                renderAll(); toggleAddGoal(); triggerAutoSave();
-            }
-        };
-
-        function setupSliderListeners() {
-            Object.keys(els.inputs).forEach(key => {
-                els.inputs[key].addEventListener('input', (e) => {
-                    state.expenses[key] = parseInt(e.target.value);
-                    els.displays[key].innerText = formatCurrency(state.expenses[key]);
-                    renderAll(); triggerAutoSave();
-                });
-                els.displays[key].innerText = formatCurrency(state.expenses[key]);
-            });
-        }
-
-        // --- CALCULATION LOGIC ---
-
-        function calculateAndDraw() {
-            const totalIncome = state.incomes.reduce((s, i) => s + i.amount, 0);
-            const fixedExpenses = Object.values(state.expenses).reduce((s, v) => s + v, 0);
-            
-            // Build Month-by-Month Savings
-            let monthlySavingsData = [];
-            let cumulativeSavings = 0;
-            let totalYearSavings = 0;
-            
-            // For Displaying "Current/Avg" Expense
-            let firstMonthExpense = fixedExpenses;
-
-            for (let m = 0; m < 12; m++) {
-                // Base fixed expense
-                let monthExp = fixedExpenses;
+        // AUTH & INIT
+        function login() {
+            const input = document.getElementById('username-input');
+            const name = input.value.trim();
+            if (name) {
+                userName = name;
+                localStorage.setItem('finance_user_name', name);
                 
-                // Add variable custom expenses
-                if (state.customExpenses) {
-                    state.customExpenses.forEach(exp => {
-                        // If duration covers this month (0-indexed m)
-                        if (m < exp.duration) {
-                            monthExp += exp.amount;
-                        }
+                // Animate Out Overlay
+                const overlay = document.getElementById('auth-overlay');
+                const box = document.getElementById('auth-box');
+                const app = document.getElementById('app-container');
+                
+                box.style.transform = 'scale(0.9)';
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    app.style.display = 'block'; // Ensure block before opacity
+                    requestAnimationFrame(() => {
+                        app.style.filter = 'blur(0)';
+                        app.style.opacity = '1';
                     });
-                }
-                
-                if (m === 0) firstMonthExpense = monthExp;
+                }, 300);
 
-                const monthSave = totalIncome - monthExp;
-                cumulativeSavings += monthSave;
-                
-                // Don't let cumulative drop below zero visually (optional, but cleaner chart)
-                // Actually, debt is real, so let it go negative or stay flat?
-                // Let's keep it real.
-                
-                monthlySavingsData.push(cumulativeSavings);
+                updateHeader();
             }
-            
-            totalYearSavings = cumulativeSavings;
-
-            // UI Updates
-            els.totalIncome.innerText = formatCurrency(totalIncome);
-            els.totalExpense.innerText = "~" + formatCurrency(firstMonthExpense); // Show Jan expense approx
-            
-            // Avg Flow Calculation
-            const avgFlow = totalYearSavings / 12;
-            els.avgFlow.innerText = formatCurrency(avgFlow);
-            els.avgFlow.className = avgFlow > 0 ? "text-lg font-bold text-blue-600" : "text-lg font-bold text-red-500";
-
-            // Totals
-            const activeGoals = state.goals.filter(g => g.active);
-            const goalsCost = activeGoals.reduce((s, g) => s + g.cost, 0);
-            const balance = totalYearSavings - goalsCost;
-
-            els.yearSavings.innerText = formatCurrency(totalYearSavings);
-            els.goalsCost.innerText = formatCurrency(goalsCost);
-            els.finalBalance.innerText = (balance > 0 ? "+" : "") + formatCurrency(balance);
-            els.finalBalance.className = balance >= 0 ? "text-2xl font-bold text-green-500" : "text-2xl font-bold text-red-500";
-
-            updateAnalysis(balance, goalsCost, activeGoals, avgFlow);
-            updateCharts(monthlySavingsData, activeGoals, state.expenses, firstMonthExpense - fixedExpenses);
         }
 
-        function updateAnalysis(balance, goalsCost, activeGoals, avgFlow) {
-            if (avgFlow <= 0) {
-                els.analysisText.innerHTML = "Ваш бюджет дефицитен. Расходы превышают доходы. Накопления невозможны.";
-                return;
-            }
-            if (balance >= 0) {
-                els.analysisText.innerHTML = "План выполним! К концу года у вас останется положительный баланс.";
-                return;
-            }
+        // Check if already logged in on load
+        window.addEventListener('load', () => {
+            document.getElementById('date-display').innerText = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
             
-            // If deficit
-            const car = activeGoals.find(g => g.id === 'car');
-            if (car) {
-                 els.analysisText.innerHTML = `Накоплений не хватит на все цели (${formatCurrency(Math.abs(balance))} дефицит). Машина — главная нагрузка. Рассмотрите кредит или перенос покупки.`;
+            if (userName) {
+                document.getElementById('auth-overlay').style.display = 'none';
+                const app = document.getElementById('app-container');
+                app.style.opacity = '1';
+                app.style.filter = 'blur(0)';
+                updateHeader();
+            }
+        });
+
+        function updateHeader() {
+            document.getElementById('user-name-display').innerText = userName;
+            document.getElementById('user-avatar').innerText = userName.charAt(0).toUpperCase();
+        }
+
+        // SYNC FROM FIREBASE
+        window.syncState = (newState) => {
+            if (!newState) return;
+            currentState = newState;
+            // Ensure arrays
+            ['incomes', 'expenses', 'goals', 'messages'].forEach(k => {
+                if (!currentState[k]) currentState[k] = [];
+            });
+            renderAll();
+        };
+
+        function triggerSave() {
+            if (window.saveToCloud) window.saveToCloud(currentState);
+        }
+
+        // RENDERING
+        function renderAll() {
+            renderList('income-list', currentState.incomes, (item, idx) => `
+                <div class="group flex items-center justify-between bg-white/50 hover:bg-white p-3 rounded-xl border border-transparent hover:border-indigo-100 transition-all shadow-sm">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-gray-800 truncate">${item.name}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">${item.type === 'monthly' ? 'Ежемес.' : 'Разово'}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 flex items-center gap-1">
+                            Автор: ${item.author}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-green-600">+${formatMoney(item.amount)}</span>
+                        <button onclick="removeItem('incomes', ${idx})" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition">×</button>
+                    </div>
+                </div>
+            `);
+
+            renderList('expense-list', currentState.expenses, (item, idx) => `
+                <div class="group flex items-center justify-between bg-white/50 hover:bg-white p-3 rounded-xl border border-transparent hover:border-indigo-100 transition-all shadow-sm">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-gray-800 truncate">${item.name}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded ${item.duration < 12 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}">
+                                ${item.duration} мес
+                            </span>
+                        </div>
+                        <div class="text-xs text-gray-500">Автор: ${item.author}</div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-gray-700">-${formatMoney(item.amount)}</span>
+                        <button onclick="removeItem('expenses', ${idx})" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition">×</button>
+                    </div>
+                </div>
+            `);
+
+            renderList('goal-list', currentState.goals, (item, idx) => `
+                <div class="group flex items-center justify-between bg-white/50 p-3 rounded-xl border border-transparent shadow-sm">
+                    <div class="flex items-center gap-3 flex-1">
+                        <input type="checkbox" ${item.active ? 'checked' : ''} onchange="toggleGoal(${idx})" class="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer">
+                        <div>
+                            <div class="font-semibold text-gray-800">${item.name}</div>
+                            <div class="text-xs text-gray-500">${formatMoney(item.cost)}</div>
+                        </div>
+                    </div>
+                    <button onclick="removeItem('goals', ${idx})" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500">×</button>
+                </div>
+            `);
+
+            renderChat();
+            calculateAndDrawChart();
+        }
+
+        function renderList(elementId, data, templateFn) {
+            const el = document.getElementById(elementId);
+            if (data.length === 0) {
+                el.innerHTML = `<div class="text-center py-4 text-sm text-gray-400 italic">Список пуст</div>`;
             } else {
-                 els.analysisText.innerHTML = `Вам не хватает ${formatCurrency(Math.abs(balance))}. Попробуйте сократить временные расходы или разбить ремонт на этапы.`;
+                el.innerHTML = data.map((item, idx) => templateFn(item, idx)).join('');
             }
         }
 
-        function updateCharts(savingsData, activeGoals, expenses, customExpSumJan) {
-            const ctxMain = document.getElementById('mainChart').getContext('2d');
-            const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
-            const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+        function renderChat() {
+            const el = document.getElementById('chat-messages');
+            if (currentState.messages.length === 0) {
+                el.innerHTML = `<div class="text-center py-10 text-gray-400 text-sm">Начните обсуждение бюджета...</div>`;
+                return;
+            }
+            // Sort by time descending for display (flex-col-reverse handles visual order)
+            // But we store strictly, so lets just map.
+            // Actually flex-col-reverse expects the LAST element in HTML to be at the TOP.
+            // So we want newest messages at the end of the HTML array.
+            
+            // Sort by timestamp
+            const sorted = [...currentState.messages].sort((a,b) => a.timestamp - b.timestamp);
+            
+            el.innerHTML = sorted.map(msg => {
+                const isMe = msg.author === userName;
+                const time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                return `
+                    <div class="flex w-full mb-2">
+                        <div class="chat-bubble ${isMe ? 'chat-self' : 'chat-other'}">
+                            ${!isMe ? `<div class="text-[10px] opacity-70 mb-1 font-bold">${msg.author}</div>` : ''}
+                            ${msg.text}
+                            <div class="text-[9px] opacity-60 text-right mt-1">${time}</div>
+                        </div>
+                    </div>
+                `;
+            }).reverse().join(''); // Reverse purely for flex-col-reverse container
+        }
 
-            // Line Chart
-            let datasets = [{
-                label: 'Накопления',
-                data: savingsData,
-                borderColor: '#34C759',
-                backgroundColor: 'rgba(52, 199, 89, 0.1)',
-                borderWidth: 3,
-                tension: 0.3,
-                fill: true,
-                pointRadius: 0
-            }];
+        // ACTIONS
+        function toggleForm(type) {
+            const form = document.getElementById(`form-${type}`);
+            form.classList.toggle('hidden');
+        }
 
-            let runningCost = 0;
-            activeGoals.forEach(g => {
-                runningCost += g.cost;
-                datasets.push({
-                    label: g.name,
-                    data: Array(12).fill(runningCost),
-                    borderColor: g.color || '#999',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    pointRadius: 0,
-                    fill: false
+        window.addIncome = () => {
+            const name = document.getElementById('inc-name').value;
+            const amount = parseFloat(document.getElementById('inc-amount').value);
+            const type = document.getElementById('inc-type').value;
+            if (name && amount) {
+                currentState.incomes.push({ 
+                    id: Date.now(), name, amount, type, author: userName 
                 });
-            });
+                clearInputs(['inc-name', 'inc-amount']);
+                toggleForm('income');
+                renderAll(); triggerSave();
+            }
+        };
 
-            if (mainChart) mainChart.destroy();
-            mainChart = new Chart(ctxMain, {
+        window.addExpense = () => {
+            const name = document.getElementById('exp-name').value;
+            const amount = parseFloat(document.getElementById('exp-amount').value);
+            const duration = parseInt(document.getElementById('exp-duration').value) || 12;
+            if (name && amount) {
+                currentState.expenses.push({ 
+                    id: Date.now(), name, amount, duration, author: userName 
+                });
+                clearInputs(['exp-name', 'exp-amount']);
+                toggleForm('expense');
+                renderAll(); triggerSave();
+            }
+        };
+
+        window.addGoal = () => {
+            const name = document.getElementById('goal-name').value;
+            const cost = parseFloat(document.getElementById('goal-cost').value);
+            if (name && cost) {
+                currentState.goals.push({ 
+                    id: Date.now(), name, cost, active: true, author: userName 
+                });
+                clearInputs(['goal-name', 'goal-cost']);
+                toggleForm('goal');
+                renderAll(); triggerSave();
+            }
+        };
+
+        window.removeItem = (arrName, idx) => {
+            if(confirm('Удалить запись?')) {
+                currentState[arrName].splice(idx, 1);
+                renderAll(); triggerSave();
+            }
+        };
+
+        window.toggleGoal = (idx) => {
+            currentState.goals[idx].active = !currentState.goals[idx].active;
+            renderAll(); triggerSave();
+        };
+
+        // CHAT ACTIONS
+        window.handleChatKey = (e) => { if(e.key === 'Enter') sendMessage(); }
+        window.sendMessage = () => {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(text) {
+                currentState.messages.push({
+                    id: Date.now(),
+                    text: text,
+                    author: userName,
+                    timestamp: Date.now()
+                });
+                input.value = '';
+                renderChat(); triggerSave();
+            }
+        };
+
+        // CALCULATIONS & CHART
+        function calculateAndDrawChart() {
+            const labels = [];
+            const dataAccumulated = [];
+            let currentBalance = 0;
+            let totalInc = 0;
+            let totalExp = 0;
+
+            const today = new Date();
+            const currentMonth = today.getMonth(); // 0-11
+            const currentYear = today.getFullYear();
+
+            // Calculate next 12 months
+            for (let i = 0; i < 12; i++) {
+                // Determine actual Date for this step
+                const date = new Date(currentYear, currentMonth + i, 1);
+                const monthName = date.toLocaleDateString('ru-RU', { month: 'short' });
+                labels.push(monthName);
+
+                // Income Logic
+                let monthlyIncome = 0;
+                currentState.incomes.forEach(inc => {
+                    if (inc.type === 'monthly') {
+                        monthlyIncome += inc.amount;
+                    } else if (inc.type === 'once') {
+                        // For simplicity, add 'once' incomes in the current month (index 0)
+                        if (i === 0) monthlyIncome += inc.amount;
+                    }
+                });
+
+                // Expense Logic
+                let monthlyExpense = 0;
+                currentState.expenses.forEach(exp => {
+                    // Check if duration covers this month
+                    if (i < exp.duration) {
+                        monthlyExpense += exp.amount;
+                    }
+                });
+
+                currentBalance += (monthlyIncome - monthlyExpense);
+                dataAccumulated.push(currentBalance);
+                
+                totalInc += monthlyIncome;
+                totalExp += monthlyExpense;
+            }
+
+            // Update Stats
+            document.getElementById('global-balance').innerText = formatMoney(currentBalance - getActiveGoalsCost());
+            document.getElementById('stat-end-balance').innerText = formatMoney(currentBalance);
+            document.getElementById('stat-total-inc').innerText = formatMoney(totalInc);
+            document.getElementById('stat-total-exp').innerText = formatMoney(totalExp);
+
+            // Chart Draw
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            
+            // Goals Overlay
+            const goalsCost = getActiveGoalsCost();
+            const goalsDataset = Array(12).fill(goalsCost);
+
+            // Gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.5)'); // Indigo
+            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
                 type: 'line',
-                data: { labels, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-
-            // Doughnut (Jan Snapshot)
-            const expData = [expenses.food, expenses.utilities, expenses.child, expenses.misc, customExpSumJan];
-            const expLabels = ['Еда', 'Дом', 'Ребенок', 'Прочее', 'Доп. траты'];
-            const expColors = ['#60A5FA', '#F87171', '#34D399', '#A78BFA', '#FBBF24'];
-
-            if (doughnutChart) doughnutChart.destroy();
-            doughnutChart = new Chart(ctxDoughnut, {
-                type: 'doughnut',
                 data: {
-                    labels: expLabels,
-                    datasets: [{ data: expData, backgroundColor: expColors, borderWidth: 0, hoverOffset: 4 }]
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Прогноз баланса',
+                            data: dataAccumulated,
+                            borderColor: '#6366f1',
+                            backgroundColor: gradient,
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#fff',
+                            pointBorderColor: '#6366f1',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Стоимость целей',
+                            data: goalsDataset,
+                            borderColor: '#cbd5e1',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '70%',
-                    plugins: { legend: { display: false } }
+                    plugins: {
+                        legend: { display: true, position: 'bottom' },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#475569',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatMoney(context.raw);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: { callback: (val) => val / 1000 + 'к' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
                 }
             });
         }
 
-        function formatCurrency(num) {
+        // UTILS
+        function getActiveGoalsCost() {
+            return currentState.goals.filter(g => g.active).reduce((sum, g) => sum + g.cost, 0);
+        }
+
+        function clearInputs(ids) {
+            ids.forEach(id => document.getElementById(id).value = '');
+        }
+
+        function formatMoney(num) {
             return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(num);
         }
 
-        init();
     </script>
 </body>
 </html>
-
