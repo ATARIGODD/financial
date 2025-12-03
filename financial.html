@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Финансовый План 2026</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts (Inter as SF Pro alternative) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Apple-style CSS -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #F5F5F7; /* Apple Light Gray */
+            color: #1D1D1F;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Glassmorphism & Cards */
+        .ios-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            transition: transform 0.2s ease;
+        }
+
+        /* Inputs */
+        .ios-input {
+            background: #F2F2F7; /* System Fill */
+            border: none;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 15px;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        .ios-input:focus {
+            background: #E5E5EA;
+            outline: none;
+        }
+        
+        /* Sliders (Apple Style) */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #FFFFFF;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            margin-top: -10px;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #E5E5EA;
+            border-radius: 2px;
+        }
+
+        /* Toggles (iOS Switch) */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #007AFF;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #007AFF;
+        }
+        
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: #D1D1D6; border-radius: 3px; }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    </style>
+</head>
+<body class="pb-12">
+
+    <!-- Sticky Header (Glass) -->
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">Финансы 2026</h1>
+                <p class="text-xs text-gray-500 font-medium">Планирование бюджета в Улан-Удэ</p>
+            </div>
+            <div class="text-right">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Свободный поток</div>
+                <div id="header-balance" class="text-2xl font-bold text-blue-600 tracking-tight">0 ₽</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: Inputs -->
+        <div class="lg:col-span-5 space-y-6">
+
+            <!-- 1. Income Section -->
+            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Доходы</h2>
+                    <span id="total-income-display" class="text-sm font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-lg">108 000 ₽</span>
+                </div>
+                
+                <div id="income-list" class="space-y-3 mb-4">
+                    <!-- Incomes will be injected here -->
+                </div>
+
+                <!-- Add Income Button -->
+                <button onclick="toggleAddIncome()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
+                    + Добавить источник
+                </button>
+                
+                <!-- Hidden Add Form -->
+                <div id="add-income-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
+                    <input type="text" id="new-income-name" placeholder="Название (напр. Премия)" class="ios-input bg-white">
+                    <input type="number" id="new-income-amount" placeholder="Сумма" class="ios-input bg-white">
+                    <div class="flex space-x-2 pt-1">
+                        <button onclick="addIncome()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700">Сохранить</button>
+                        <button onclick="toggleAddIncome()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300">Отмена</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Expenses Section -->
+            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.2s;">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-bold">Расходы (в месяц)</h2>
+                    <span id="total-expense-display" class="text-sm font-semibold text-gray-500">0 ₽</span>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- Sliders with Apple styling -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium">🛒 Продукты и быт</span>
+                            <span id="val-food" class="text-gray-600 font-semibold">35 000 ₽</span>
+                        </div>
+                        <input type="range" min="15000" max="60000" step="1000" value="35000" id="input-food" class="accent-blue-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium text-red-500">🔥 Дом (Отопление/Свет)</span>
+                            <span id="val-utilities" class="text-gray-600 font-semibold">15 000 ₽</span>
+                        </div>
+                        <input type="range" min="3000" max="35000" step="500" value="15000" id="input-utilities" class="accent-red-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium">👶 Ребенок (2 года)</span>
+                            <span id="val-child" class="text-gray-600 font-semibold">10 000 ₽</span>
+                        </div>
+                        <input type="range" min="5000" max="30000" step="1000" value="10000" id="input-child" class="accent-blue-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium">👕 Одежда</span>
+                            <span id="val-clothes" class="text-gray-600 font-semibold">5 000 ₽</span>
+                        </div>
+                        <input type="range" min="0" max="20000" step="500" value="5000" id="input-clothes" class="accent-blue-500">
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium">💊 Здоровье</span>
+                            <span id="val-health" class="text-gray-600 font-semibold">3 000 ₽</span>
+                        </div>
+                        <input type="range" min="0" max="20000" step="500" value="3000" id="input-health" class="accent-blue-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="font-medium">🚗 Прочее / Транспорт</span>
+                            <span id="val-misc" class="text-gray-600 font-semibold">7 000 ₽</span>
+                        </div>
+                        <input type="range" min="2000" max="25000" step="500" value="7000" id="input-misc" class="accent-blue-500">
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Goals Section -->
+            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.3s;">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Цели</h2>
+                    <button onclick="toggleAddGoal()" class="text-blue-600 text-sm font-semibold hover:opacity-70">+ Добавить</button>
+                </div>
+                
+                <div id="goals-list" class="space-y-3 custom-scroll max-h-[300px] overflow-y-auto pr-1">
+                    <!-- Goals injected here -->
+                </div>
+
+                <!-- Hidden Add Goal Form -->
+                <div id="add-goal-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
+                    <input type="text" id="new-goal-name" placeholder="Название цели" class="ios-input bg-white">
+                    <input type="number" id="new-goal-cost" placeholder="Стоимость" class="ios-input bg-white">
+                    <div class="flex space-x-2 pt-1">
+                        <button onclick="addGoal()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700">Добавить</button>
+                        <button onclick="toggleAddGoal()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300">Отмена</button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- RIGHT COLUMN: Analytics -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- Main Analytics Card -->
+            <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
+                <h2 class="text-lg font-bold mb-1">Прогноз на 2026</h2>
+                <p class="text-sm text-gray-500 mb-6">Динамика накоплений относительно стоимости целей</p>
+                
+                <div class="chart-container">
+                    <canvas id="mainChart"></canvas>
+                </div>
+
+                <!-- Smart Analysis Box -->
+                <div class="mt-6 bg-blue-50/50 rounded-xl p-5 border border-blue-100">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0 bg-blue-100 rounded-full p-2 mr-3">
+                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-blue-900 mb-1">Анализ ситуации</h4>
+                            <p id="analysis-text" class="text-sm text-blue-800 leading-relaxed opacity-90">Загрузка данных...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Secondary Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in" style="animation-delay: 0.2s;">
+                
+                <!-- Doughnut Chart -->
+                <div class="ios-card p-6 flex flex-col items-center">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-4 w-full text-left">Структура расходов</h3>
+                    <div style="height: 180px; width: 100%;">
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="ios-card p-6 flex flex-col justify-center space-y-4">
+                    <div>
+                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Остаток за год</div>
+                        <div id="year-savings-val" class="text-2xl font-bold text-gray-900">0 ₽</div>
+                    </div>
+                    <div class="w-full h-px bg-gray-100"></div>
+                    <div>
+                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Все цели (сумма)</div>
+                        <div id="goals-cost-val" class="text-2xl font-bold text-gray-900">0 ₽</div>
+                    </div>
+                    <div class="w-full h-px bg-gray-100"></div>
+                    <div>
+                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Итоговый баланс</div>
+                        <div id="final-balance-val" class="text-2xl font-bold">0 ₽</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // --- STATE ---
+        const state = {
+            incomes: [
+                { id: 'inc1', name: 'Зарплата', amount: 90000 },
+                { id: 'inc2', name: 'Детские', amount: 18000 }
+            ],
+            expenses: {
+                food: 35000,
+                utilities: 15000,
+                child: 10000,
+                clothes: 5000,
+                health: 3000,
+                misc: 7000
+            },
+            goals: [
+                { id: 'electricity', name: '⚡ 3 Фазы (Свет)', cost: 55000, active: true, color: '#007AFF' }, // System Blue
+                { id: 'sewage', name: '💧 Канализация', cost: 120000, active: true, color: '#5856D6' }, // System Indigo
+                { id: 'bathroom', name: '🛁 Ванная', cost: 150000, active: true, color: '#34C759' }, // System Green
+                { id: 'walls', name: '🧱 Ремонт стен', cost: 60000, active: true, color: '#FF9500' }, // System Orange
+                { id: 'car', name: '🚗 Машина', cost: 650000, active: true, color: '#FF3B30' } // System Red
+            ]
+        };
+
+        const chartColors = ['#8E8E93', '#FF3B30', '#5AC8FA', '#34C759', '#FF9500', '#5856D6'];
+        let mainChart = null;
+        let doughnutChart = null;
+
+        // --- DOM REFS ---
+        const els = {
+            incomesList: document.getElementById('income-list'),
+            totalIncome: document.getElementById('total-income-display'),
+            totalExpense: document.getElementById('total-expense-display'),
+            goalsList: document.getElementById('goals-list'),
+            headerBalance: document.getElementById('header-balance'),
+            yearSavings: document.getElementById('year-savings-val'),
+            goalsCost: document.getElementById('goals-cost-val'),
+            finalBalance: document.getElementById('final-balance-val'),
+            analysisText: document.getElementById('analysis-text'),
+            inputs: {
+                food: document.getElementById('input-food'),
+                utilities: document.getElementById('input-utilities'),
+                child: document.getElementById('input-child'),
+                clothes: document.getElementById('input-clothes'),
+                health: document.getElementById('input-health'),
+                misc: document.getElementById('input-misc'),
+            },
+            displays: {
+                food: document.getElementById('val-food'),
+                utilities: document.getElementById('val-utilities'),
+                child: document.getElementById('val-child'),
+                clothes: document.getElementById('val-clothes'),
+                health: document.getElementById('val-health'),
+                misc: document.getElementById('val-misc'),
+            }
+        };
+
+        // --- INIT ---
+        function init() {
+            renderIncomes();
+            renderGoals();
+            setupExpenseListeners();
+            updateAll();
+        }
+
+        // --- RENDERERS ---
+
+        function renderIncomes() {
+            els.incomesList.innerHTML = '';
+            state.incomes.forEach((inc, idx) => {
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm";
+                div.innerHTML = `
+                    <div class="flex-1">
+                        <div class="text-xs text-gray-400 font-medium uppercase">${inc.name}</div>
+                        <input type="number" value="${inc.amount}" onchange="updateIncome(${idx}, this.value)" 
+                            class="font-semibold text-gray-800 w-full focus:outline-none bg-transparent">
+                    </div>
+                    <button onclick="removeIncome(${idx})" class="text-gray-300 hover:text-red-500 transition-colors ml-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+                els.incomesList.appendChild(div);
+            });
+        }
+
+        function renderGoals() {
+            els.goalsList.innerHTML = '';
+            state.goals.forEach((goal, idx) => {
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm";
+                
+                // Toggle Switch Logic
+                const toggleId = `toggle-${idx}`;
+                
+                div.innerHTML = `
+                    <div class="flex items-center flex-1 mr-4">
+                        <div class="relative inline-block w-10 mr-3 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="${toggleId}" id="${toggleId}" ${goal.active ? 'checked' : ''} 
+                                class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 left-0 top-0 transition-all duration-300"
+                                onchange="toggleGoal(${idx}, this.checked)">
+                            <label for="${toggleId}" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer transition-colors duration-300"></label>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-gray-900 truncate" title="${goal.name}">${goal.name}</div>
+                            <div class="flex items-baseline text-xs text-gray-500">
+                                <input type="number" value="${goal.cost}" onchange="updateGoalCost(${idx}, this.value)" 
+                                    class="w-20 bg-transparent focus:outline-none focus:text-blue-600 focus:font-bold border-b border-transparent focus:border-blue-200 transition-colors">
+                                <span class="ml-1">₽</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${goal.id === 'car' ? '<span class="text-xs text-red-400 font-bold px-2 py-0.5 bg-red-50 rounded">Сложно</span>' : ''}
+                `;
+                els.goalsList.appendChild(div);
+            });
+        }
+
+        // --- ACTIONS ---
+
+        function updateIncome(idx, val) {
+            state.incomes[idx].amount = parseInt(val) || 0;
+            updateAll();
+        }
+
+        function removeIncome(idx) {
+            state.incomes.splice(idx, 1);
+            renderIncomes();
+            updateAll();
+        }
+
+        function toggleAddIncome() {
+            const form = document.getElementById('add-income-form');
+            form.classList.toggle('hidden');
+        }
+
+        function addIncome() {
+            const name = document.getElementById('new-income-name').value;
+            const amount = parseInt(document.getElementById('new-income-amount').value);
+            if(name && amount) {
+                state.incomes.push({ id: Date.now(), name, amount });
+                renderIncomes();
+                updateAll();
+                toggleAddIncome();
+                document.getElementById('new-income-name').value = '';
+                document.getElementById('new-income-amount').value = '';
+            }
+        }
+
+        function setupExpenseListeners() {
+            Object.keys(els.inputs).forEach(key => {
+                els.inputs[key].addEventListener('input', (e) => {
+                    state.expenses[key] = parseInt(e.target.value);
+                    els.displays[key].innerText = formatCurrency(state.expenses[key]);
+                    updateAll();
+                });
+            });
+        }
+
+        function toggleGoal(idx, isActive) {
+            state.goals[idx].active = isActive;
+            updateAll();
+        }
+
+        function updateGoalCost(idx, val) {
+            state.goals[idx].cost = parseInt(val) || 0;
+            updateAll();
+        }
+
+        function toggleAddGoal() {
+            const form = document.getElementById('add-goal-form');
+            form.classList.toggle('hidden');
+        }
+
+        function addGoal() {
+            const name = document.getElementById('new-goal-name').value;
+            const cost = parseInt(document.getElementById('new-goal-cost').value);
+            if(name && cost) {
+                state.goals.push({ 
+                    id: 'custom-' + Date.now(), 
+                    name, 
+                    cost, 
+                    active: true, 
+                    color: '#8E8E93' 
+                });
+                renderGoals();
+                updateAll();
+                toggleAddGoal();
+                document.getElementById('new-goal-name').value = '';
+                document.getElementById('new-goal-cost').value = '';
+            }
+        }
+
+        // --- CORE LOGIC ---
+
+        function updateAll() {
+            // 1. Calc Totals
+            const totalIncome = state.incomes.reduce((sum, item) => sum + item.amount, 0);
+            const totalExpense = Object.values(state.expenses).reduce((sum, val) => sum + val, 0);
+            const monthlySavings = totalIncome - totalExpense;
+            
+            // 2. Update Basic UI
+            els.totalIncome.innerText = formatCurrency(totalIncome);
+            els.totalExpense.innerText = formatCurrency(totalExpense);
+            els.headerBalance.innerText = formatCurrency(monthlySavings);
+            els.headerBalance.className = monthlySavings >= 0 
+                ? "text-2xl font-bold text-blue-600 tracking-tight" 
+                : "text-2xl font-bold text-red-500 tracking-tight";
+
+            const yearSavings = monthlySavings * 12;
+            const activeGoals = state.goals.filter(g => g.active);
+            const goalsCost = activeGoals.reduce((sum, g) => sum + g.cost, 0);
+            const balance = yearSavings - goalsCost;
+
+            els.yearSavings.innerText = formatCurrency(yearSavings);
+            els.goalsCost.innerText = formatCurrency(goalsCost);
+            els.finalBalance.innerText = (balance > 0 ? "+" : "") + formatCurrency(balance);
+            els.finalBalance.className = balance >= 0 ? "text-2xl font-bold text-green-500" : "text-2xl font-bold text-red-500";
+
+            // 3. Update Analysis Text
+            generateAnalysis(monthlySavings, goalsCost, activeGoals, totalIncome);
+
+            // 4. Update Charts
+            updateCharts(monthlySavings, activeGoals, state.expenses);
+        }
+
+        function generateAnalysis(monthlySavings, goalsCost, activeGoals, totalIncome) {
+            const carGoal = activeGoals.find(g => g.id === 'car');
+            const carCost = carGoal ? carGoal.cost : 0;
+            
+            if (monthlySavings <= 0) {
+                els.analysisText.innerHTML = `Ваши расходы превышают доходы на <span class="font-bold text-red-600">${formatCurrency(Math.abs(monthlySavings))}</span>. Планирование крупных покупок невозможно без оптимизации бюджета.`;
+                return;
+            }
+
+            const monthsNeeded = goalsCost / monthlySavings;
+            let html = `При текущем свободном потоке (${formatCurrency(monthlySavings)}/мес), на реализацию всех целей потребуется <strong>${(monthsNeeded/12).toFixed(1)} года</strong> (или ${Math.ceil(monthsNeeded)} мес). `;
+
+            if (carGoal) {
+                const carShare = (carCost / goalsCost) * 100;
+                html += `<br><br>Автомобиль стоимостью <strong>${formatCurrency(carCost)}</strong> составляет ${Math.round(carShare)}% от всего бюджета целей. `;
+                
+                if (monthsNeeded > 12) {
+                    html += `В 2026 году рекомендуется сосредоточиться на коммуникациях (свет, канализация, тепло), а покупку машины рассмотреть в кредит, если ежемесячный платеж будет меньше <strong>${formatCurrency(monthlySavings * 0.4)}</strong> (комфортная нагрузка).`;
+                } else {
+                    html += `Бюджет позволяет приобрести авто в конце года, если строго придерживаться плана.`;
+                }
+            } else {
+                html += `<br><br>Без автомобиля в списке целей, вы завершите ремонт дома значительно быстрее — примерно за <strong>${Math.ceil((goalsCost - carCost)/monthlySavings)} мес</strong>.`;
+            }
+            
+            els.analysisText.innerHTML = html;
+        }
+
+        // --- CHARTS ---
+
+        function updateCharts(monthlySavings, activeGoals, expenses) {
+            const ctxMain = document.getElementById('mainChart').getContext('2d');
+            const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
+
+            // --- Chart 1: Timeline ---
+            const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+            let savingsData = [];
+            let current = 0;
+            const effectiveSavings = monthlySavings > 0 ? monthlySavings : 0;
+            for(let i=0; i<12; i++) {
+                current += effectiveSavings;
+                savingsData.push(current);
+            }
+
+            // Stacked Goals
+            let datasets = [
+                {
+                    label: 'Накопления',
+                    data: savingsData,
+                    borderColor: '#34C759', // Apple Green
+                    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 0,
+                    order: 1
+                }
+            ];
+
+            let runningGoalCost = 0;
+            activeGoals.forEach(g => {
+                runningGoalCost += g.cost;
+                datasets.push({
+                    label: g.name,
+                    data: Array(12).fill(runningGoalCost),
+                    borderColor: g.color || '#8E8E93',
+                    borderWidth: 2,
+                    borderDash: [6, 6],
+                    pointRadius: 0,
+                    fill: false,
+                    order: 2
+                });
+            });
+
+            if (mainChart) {
+                mainChart.data.datasets = datasets;
+                mainChart.update();
+            } else {
+                mainChart = new Chart(ctxMain, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(0,0,0,0.8)',
+                                titleFont: { family: '-apple-system', size: 13 },
+                                bodyFont: { family: '-apple-system', size: 13 },
+                                padding: 10,
+                                cornerRadius: 8,
+                                displayColors: true
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#E5E5EA', drawBorder: false },
+                                ticks: { font: { family: '-apple-system' }, color: '#8E8E93' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { font: { family: '-apple-system' }, color: '#8E8E93' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // --- Chart 2: Expenses ---
+            const expLabels = ['Еда', 'Дом', 'Ребенок', 'Одежда', 'Здоровье', 'Прочее', 'Остаток'];
+            const expData = [
+                expenses.food, 
+                expenses.utilities, 
+                expenses.child, 
+                expenses.clothes, 
+                expenses.health, 
+                expenses.misc, 
+                effectiveSavings
+            ];
+            const expColors = ['#FF9500', '#FF3B30', '#5AC8FA', '#5856D6', '#AF52DE', '#8E8E93', '#34C759'];
+
+            if (doughnutChart) {
+                doughnutChart.data.datasets[0].data = expData;
+                doughnutChart.update();
+            } else {
+                doughnutChart = new Chart(ctxDoughnut, {
+                    type: 'doughnut',
+                    data: {
+                        labels: expLabels,
+                        datasets: [{
+                            data: expData,
+                            backgroundColor: expColors,
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(num);
+        }
+
+        init();
+    </script>
+</body>
+</html>
