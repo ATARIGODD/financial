@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- FIX: Added viewport-fit=cover for full screen usage on iPhone -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Финансовый План 2026</title>
     
     <!-- Tailwind CSS -->
@@ -11,19 +12,19 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Google Fonts (Inter as SF Pro alternative) -->
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Apple-style CSS -->
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #F5F5F7; /* Apple Light Gray */
+            background-color: #F5F5F7;
             color: #1D1D1F;
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Glassmorphism & Cards */
+        /* Glassmorphism */
         .ios-card {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(20px);
@@ -34,9 +35,8 @@
             transition: transform 0.2s ease;
         }
 
-        /* Inputs */
         .ios-input {
-            background: #F2F2F7; /* System Fill */
+            background: #F2F2F7;
             border: none;
             border-radius: 10px;
             padding: 8px 12px;
@@ -49,7 +49,7 @@
             outline: none;
         }
         
-        /* Sliders (Apple Style) */
+        /* Sliders */
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -73,7 +73,7 @@
             border-radius: 2px;
         }
 
-        /* Toggles (iOS Switch) */
+        /* Toggles */
         .toggle-checkbox:checked {
             right: 0;
             border-color: #007AFF;
@@ -82,19 +82,17 @@
             background-color: #007AFF;
         }
         
-        /* Custom Scrollbar */
+        /* Scrollbar */
         .custom-scroll::-webkit-scrollbar { width: 6px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background-color: #D1D1D6; border-radius: 3px; }
 
-        /* Chart Container */
         .chart-container {
             position: relative;
             width: 100%;
             height: 320px;
         }
 
-        /* Animations */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -104,12 +102,13 @@
 </head>
 <body class="pb-12">
 
-    <!-- Sticky Header (Glass) -->
-    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+    <!-- Sticky Header (Glass) + SAFE AREA FIX -->
+    <!-- Added pt-[env(safe-area-inset-top)] to handle the notch -->
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50 pt-[env(safe-area-inset-top)] transition-all duration-200">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
             <div>
                 <h1 class="text-xl font-bold tracking-tight">Финансы 2026</h1>
-                <p class="text-xs text-gray-500 font-medium">Планирование бюджета в Улан-Удэ</p>
+                <p class="text-xs text-gray-500 font-medium">Улан-Удэ</p>
             </div>
             <div class="text-right">
                 <div class="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Свободный поток</div>
@@ -118,7 +117,7 @@
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
         <!-- LEFT COLUMN: Inputs -->
         <div class="lg:col-span-5 space-y-6">
@@ -131,15 +130,13 @@
                 </div>
                 
                 <div id="income-list" class="space-y-3 mb-4">
-                    <!-- Incomes will be injected here -->
+                    <!-- Incomes injected here -->
                 </div>
 
-                <!-- Add Income Button -->
                 <button onclick="toggleAddIncome()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
                     + Добавить источник
                 </button>
                 
-                <!-- Hidden Add Form -->
                 <div id="add-income-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
                     <input type="text" id="new-income-name" placeholder="Название (напр. Премия)" class="ios-input bg-white">
                     <input type="number" id="new-income-amount" placeholder="Сумма" class="ios-input bg-white">
@@ -158,7 +155,6 @@
                 </div>
 
                 <div class="space-y-6">
-                    <!-- Sliders with Apple styling -->
                     <div>
                         <div class="flex justify-between text-sm mb-2">
                             <span class="font-medium">🛒 Продукты и быт</span>
@@ -220,7 +216,6 @@
                     <!-- Goals injected here -->
                 </div>
 
-                <!-- Hidden Add Goal Form -->
                 <div id="add-goal-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
                     <input type="text" id="new-goal-name" placeholder="Название цели" class="ios-input bg-white">
                     <input type="number" id="new-goal-cost" placeholder="Стоимость" class="ios-input bg-white">
@@ -239,13 +234,12 @@
             <!-- Main Analytics Card -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
                 <h2 class="text-lg font-bold mb-1">Прогноз на 2026</h2>
-                <p class="text-sm text-gray-500 mb-6">Динамика накоплений относительно стоимости целей</p>
+                <p class="text-sm text-gray-500 mb-6">Динамика накоплений vs Стоимость целей</p>
                 
                 <div class="chart-container">
                     <canvas id="mainChart"></canvas>
                 </div>
 
-                <!-- Smart Analysis Box -->
                 <div class="mt-6 bg-blue-50/50 rounded-xl p-5 border border-blue-100">
                     <div class="flex items-start">
                         <div class="flex-shrink-0 bg-blue-100 rounded-full p-2 mr-3">
@@ -262,7 +256,6 @@
             <!-- Secondary Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in" style="animation-delay: 0.2s;">
                 
-                <!-- Doughnut Chart -->
                 <div class="ios-card p-6 flex flex-col items-center">
                     <h3 class="text-sm font-semibold text-gray-500 mb-4 w-full text-left">Структура расходов</h3>
                     <div style="height: 180px; width: 100%;">
@@ -270,7 +263,6 @@
                     </div>
                 </div>
 
-                <!-- Summary Stats -->
                 <div class="ios-card p-6 flex flex-col justify-center space-y-4">
                     <div>
                         <div class="text-xs text-gray-400 font-medium uppercase mb-1">Остаток за год</div>
@@ -295,7 +287,6 @@
     </main>
 
     <script>
-        // --- STATE ---
         const state = {
             incomes: [
                 { id: 'inc1', name: 'Зарплата', amount: 90000 },
@@ -310,11 +301,11 @@
                 misc: 7000
             },
             goals: [
-                { id: 'electricity', name: '⚡ 3 Фазы (Свет)', cost: 55000, active: true, color: '#007AFF' }, // System Blue
-                { id: 'sewage', name: '💧 Канализация', cost: 120000, active: true, color: '#5856D6' }, // System Indigo
-                { id: 'bathroom', name: '🛁 Ванная', cost: 150000, active: true, color: '#34C759' }, // System Green
-                { id: 'walls', name: '🧱 Ремонт стен', cost: 60000, active: true, color: '#FF9500' }, // System Orange
-                { id: 'car', name: '🚗 Машина', cost: 650000, active: true, color: '#FF3B30' } // System Red
+                { id: 'electricity', name: '⚡ 3 Фазы (Свет)', cost: 55000, active: true, color: '#007AFF' },
+                { id: 'sewage', name: '💧 Канализация', cost: 120000, active: true, color: '#5856D6' },
+                { id: 'bathroom', name: '🛁 Ванная', cost: 150000, active: true, color: '#34C759' },
+                { id: 'walls', name: '🧱 Ремонт стен', cost: 60000, active: true, color: '#FF9500' },
+                { id: 'car', name: '🚗 Машина', cost: 650000, active: true, color: '#FF3B30' }
             ]
         };
 
@@ -322,7 +313,6 @@
         let mainChart = null;
         let doughnutChart = null;
 
-        // --- DOM REFS ---
         const els = {
             incomesList: document.getElementById('income-list'),
             totalIncome: document.getElementById('total-income-display'),
@@ -351,15 +341,12 @@
             }
         };
 
-        // --- INIT ---
         function init() {
             renderIncomes();
             renderGoals();
             setupExpenseListeners();
             updateAll();
         }
-
-        // --- RENDERERS ---
 
         function renderIncomes() {
             els.incomesList.innerHTML = '';
@@ -385,10 +372,7 @@
             state.goals.forEach((goal, idx) => {
                 const div = document.createElement('div');
                 div.className = "flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm";
-                
-                // Toggle Switch Logic
                 const toggleId = `toggle-${idx}`;
-                
                 div.innerHTML = `
                     <div class="flex items-center flex-1 mr-4">
                         <div class="relative inline-block w-10 mr-3 align-middle select-none transition duration-200 ease-in">
@@ -411,8 +395,6 @@
                 els.goalsList.appendChild(div);
             });
         }
-
-        // --- ACTIONS ---
 
         function updateIncome(idx, val) {
             state.incomes[idx].amount = parseInt(val) || 0;
@@ -487,15 +469,11 @@
             }
         }
 
-        // --- CORE LOGIC ---
-
         function updateAll() {
-            // 1. Calc Totals
             const totalIncome = state.incomes.reduce((sum, item) => sum + item.amount, 0);
             const totalExpense = Object.values(state.expenses).reduce((sum, val) => sum + val, 0);
             const monthlySavings = totalIncome - totalExpense;
             
-            // 2. Update Basic UI
             els.totalIncome.innerText = formatCurrency(totalIncome);
             els.totalExpense.innerText = formatCurrency(totalExpense);
             els.headerBalance.innerText = formatCurrency(monthlySavings);
@@ -513,10 +491,7 @@
             els.finalBalance.innerText = (balance > 0 ? "+" : "") + formatCurrency(balance);
             els.finalBalance.className = balance >= 0 ? "text-2xl font-bold text-green-500" : "text-2xl font-bold text-red-500";
 
-            // 3. Update Analysis Text
             generateAnalysis(monthlySavings, goalsCost, activeGoals, totalIncome);
-
-            // 4. Update Charts
             updateCharts(monthlySavings, activeGoals, state.expenses);
         }
 
@@ -525,36 +500,33 @@
             const carCost = carGoal ? carGoal.cost : 0;
             
             if (monthlySavings <= 0) {
-                els.analysisText.innerHTML = `Ваши расходы превышают доходы на <span class="font-bold text-red-600">${formatCurrency(Math.abs(monthlySavings))}</span>. Планирование крупных покупок невозможно без оптимизации бюджета.`;
+                els.analysisText.innerHTML = `Ваши расходы превышают доходы на <span class="font-bold text-red-600">${formatCurrency(Math.abs(monthlySavings))}</span>.`;
                 return;
             }
 
             const monthsNeeded = goalsCost / monthlySavings;
-            let html = `При текущем свободном потоке (${formatCurrency(monthlySavings)}/мес), на реализацию всех целей потребуется <strong>${(monthsNeeded/12).toFixed(1)} года</strong> (или ${Math.ceil(monthsNeeded)} мес). `;
+            let html = `При текущем свободном потоке (${formatCurrency(monthlySavings)}/мес), реализация всех целей займет <strong>${(monthsNeeded/12).toFixed(1)} года</strong> (или ${Math.ceil(monthsNeeded)} мес). `;
 
             if (carGoal) {
                 const carShare = (carCost / goalsCost) * 100;
-                html += `<br><br>Автомобиль стоимостью <strong>${formatCurrency(carCost)}</strong> составляет ${Math.round(carShare)}% от всего бюджета целей. `;
+                html += `<br><br>Автомобиль стоимостью <strong>${formatCurrency(carCost)}</strong> составляет ${Math.round(carShare)}% бюджета. `;
                 
                 if (monthsNeeded > 12) {
-                    html += `В 2026 году рекомендуется сосредоточиться на коммуникациях (свет, канализация, тепло), а покупку машины рассмотреть в кредит, если ежемесячный платеж будет меньше <strong>${formatCurrency(monthlySavings * 0.4)}</strong> (комфортная нагрузка).`;
+                    html += `В 2026 году лучше выполнить ремонт (свет, канализация), а машину взять в кредит, если платеж меньше <strong>${formatCurrency(monthlySavings * 0.4)}</strong>.`;
                 } else {
-                    html += `Бюджет позволяет приобрести авто в конце года, если строго придерживаться плана.`;
+                    html += `Бюджет позволяет приобрести авто в конце года.`;
                 }
             } else {
-                html += `<br><br>Без автомобиля в списке целей, вы завершите ремонт дома значительно быстрее — примерно за <strong>${Math.ceil((goalsCost - carCost)/monthlySavings)} мес</strong>.`;
+                html += `<br><br>Без авто ремонт завершится за <strong>${Math.ceil((goalsCost - carCost)/monthlySavings)} мес</strong>.`;
             }
             
             els.analysisText.innerHTML = html;
         }
 
-        // --- CHARTS ---
-
         function updateCharts(monthlySavings, activeGoals, expenses) {
             const ctxMain = document.getElementById('mainChart').getContext('2d');
             const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
 
-            // --- Chart 1: Timeline ---
             const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
             let savingsData = [];
             let current = 0;
@@ -564,12 +536,11 @@
                 savingsData.push(current);
             }
 
-            // Stacked Goals
             let datasets = [
                 {
                     label: 'Накопления',
                     data: savingsData,
-                    borderColor: '#34C759', // Apple Green
+                    borderColor: '#34C759',
                     backgroundColor: 'rgba(52, 199, 89, 0.1)',
                     borderWidth: 3,
                     tension: 0.4,
@@ -631,7 +602,6 @@
                 });
             }
 
-            // --- Chart 2: Expenses ---
             const expLabels = ['Еда', 'Дом', 'Ребенок', 'Одежда', 'Здоровье', 'Прочее', 'Остаток'];
             const expData = [
                 expenses.food, 
