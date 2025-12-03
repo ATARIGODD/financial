@@ -14,102 +14,6 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- КОНФИГУРАЦИЯ FIREBASE ---
-        // В этой среде мы используем системную переменную. 
-        // Если вы запускаете файл локально, замените строку ниже на вашу конфигурацию:
-        // const firebaseConfig = { apiKey: "AIzaSy...", ... };
-        const firebaseConfig = JSON.parse(__firebase_config);
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        // Global State
-        window.user = null;
-        window.familyId = null;
-        window.userName = null;
-        window.isSaving = false;
-
-        // --- AUTHENTICATION ---
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) { console.error("Auth Error:", e); }
-        };
-
-        onAuthStateChanged(auth, (u) => {
-            if (u) {
-                window.user = u;
-                // Check if already logged in locally
-                const cachedFamily = localStorage.getItem('fin_family_id');
-                const cachedName = localStorage.getItem('fin_user_name');
-                if (cachedFamily && cachedName) {
-                    performLogin(cachedName, cachedFamily);
-                } else {
-                    document.getElementById('auth-overlay').classList.remove('hidden');
-                }
-            }
-        });
-
-        // --- DATABASE LOGIC ---
-        
-        // Подключение к "Семейной комнате"
-        window.connectToFamilyDB = (famId) => {
-            console.log("Connecting to family:", famId);
-            
-            // Используем public путь, чтобы разные пользователи могли видеть данные друг друга по коду семьи
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'families', famId);
-
-            onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (!window.isSaving && data.state) {
-                        window.syncState(data.state);
-                    }
-                } else {
-                    // Создаем документ, если его нет
-                    saveToCloud(window.currentState);
-                }
-            });
-        };
-
-        // Функция Сохранения
-        window.saveToCloud = async (state) => {
-            if (!window.familyId) return;
-            window.isSaving = true;
-            
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'families', window.familyId);
-            
-            // Индикатор сохранения
-            const statusDot = document.getElementById('status-dot');
-            if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
-
-            try {
-                await setDoc(docRef, { state: state, lastUpdated: new Date().toISOString() }, { merge: true });
-                if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-green-500";
-            } catch(e) { 
-                console.error("Save Error:", e); 
-                if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-red-500";
-            } finally { 
-                setTimeout(() => window.isSaving = false, 500); 
-            }
-        };
-
-        // Запуск
-        initAuth();
-    </script>
-
     <style>
         :root {
             --glass-bg: rgba(255, 255, 255, 0.65);
@@ -120,7 +24,6 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #eef2f6;
-            /* Абстрактный фон */
             background-image: 
                 radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
                 radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
@@ -200,20 +103,41 @@
             border-bottom-left-radius: 4px;
             margin-right: auto;
         }
+
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #ffffff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="min-h-screen pb-10 overflow-x-hidden">
 
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="fixed inset-0 z-[200] bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="loader mb-4"></div>
+        <div class="text-white text-sm font-medium animate-pulse">Загрузка системы...</div>
+    </div>
+
     <!-- Auth Overlay -->
-    <div id="auth-overlay" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xl flex items-center justify-center hidden">
-        <div class="glass-card p-8 w-full max-w-sm text-center transform transition-all duration-500 scale-100 opacity-100">
-            <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔐</div>
+    <!-- Removed 'hidden' to ensure visibility if loading completes without auto-login -->
+    <div id="auth-overlay" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xl flex items-center justify-center hidden opacity-0 transition-opacity duration-500">
+        <div class="glass-card p-8 w-full max-w-sm text-center transform transition-all duration-500 scale-100">
+            <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner border border-white/10">🔐</div>
             <h2 class="text-2xl font-bold text-white mb-2">Вход в Семью</h2>
-            <p class="text-sm text-gray-300 mb-6 leading-relaxed">Введите одинаковый "Код семьи" на всех устройствах, чтобы объединить бюджет.</p>
+            <p class="text-sm text-gray-300 mb-6 leading-relaxed">Введите единый "Код семьи" на всех телефонах.</p>
             
             <div class="space-y-4">
-                <input type="text" id="login-name" placeholder="Ваше имя (напр. Иван)" class="modern-input w-full text-center font-medium" autocomplete="off">
-                <input type="text" id="login-family" placeholder="Код семьи (напр. Home2026)" class="modern-input w-full text-center font-bold tracking-widest uppercase" autocomplete="off">
+                <input type="text" id="login-name" placeholder="Ваше имя (напр. Аюр)" class="modern-input w-full text-center font-medium placeholder-gray-500" autocomplete="off">
+                <input type="text" id="login-family" placeholder="Код семьи (напр. Дом2026)" class="modern-input w-full text-center font-bold tracking-widest uppercase placeholder-gray-500" autocomplete="off">
                 <button onclick="handleLoginClick()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/40 hover:shadow-indigo-500/60 transition-all transform hover:scale-[1.02] active:scale-95">
                     Открыть бюджет
                 </button>
@@ -222,7 +146,7 @@
     </div>
 
     <!-- Main App -->
-    <div id="app-container" class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 opacity-0 transition-opacity duration-700 blur-sm">
+    <div id="app-container" class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 opacity-0 transition-opacity duration-700 blur-sm pointer-events-none">
         
         <!-- Header -->
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 animate-enter">
@@ -231,7 +155,7 @@
                 <div class="flex items-center gap-3 mt-2">
                     <div class="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10 backdrop-blur-md">
                         <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-400"></div>
-                        <span class="text-xs text-gray-200 font-medium tracking-wide uppercase" id="family-badge">Оффлайн</span>
+                        <span class="text-xs text-gray-200 font-medium tracking-wide uppercase" id="family-badge">...</span>
                     </div>
                     <p class="text-gray-400 text-sm font-medium" id="date-display">...</p>
                 </div>
@@ -410,25 +334,119 @@
         </main>
     </div>
 
-    <script>
-        // --- LOCAL STATE ---
-        let currentState = {
-            incomes: [],
-            expenses: [],
-            goals: [],
-            messages: []
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIGURATION ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- GLOBAL STATE ---
+        window.user = null;
+        window.familyId = null;
+        window.userName = null;
+        window.isSaving = false;
+        window.currentState = { incomes: [], expenses: [], goals: [], messages: [] };
+
+        // --- AUTH INIT ---
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) {
+                console.error("Auth Error:", e);
+                alert("Ошибка соединения с сервером. Попробуйте обновить страницу.");
+            }
         };
+
+        onAuthStateChanged(auth, (u) => {
+            // Hide loading screen once auth is determined
+            document.getElementById('loading-screen').style.opacity = '0';
+            setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
+
+            if (u) {
+                window.user = u;
+                // Check cache for auto-login
+                const cachedFamily = localStorage.getItem('fin_family_id');
+                const cachedName = localStorage.getItem('fin_user_name');
+                
+                if (cachedFamily && cachedName) {
+                    window.performLogin(cachedName, cachedFamily);
+                } else {
+                    // Show Login
+                    const overlay = document.getElementById('auth-overlay');
+                    overlay.classList.remove('hidden');
+                    // Force reflow for transition
+                    setTimeout(() => overlay.classList.remove('opacity-0'), 50);
+                }
+            }
+        });
+
+        // --- DATABASE LOGIC ---
+        
+        window.connectToFamilyDB = (famId) => {
+            console.log("Connecting to family:", famId);
+            // Path: /artifacts/{appId}/public/data/families/{famId}
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'families', famId);
+
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (!window.isSaving && data.state) {
+                        window.syncState(data.state);
+                    }
+                } else {
+                    // Create if new
+                    window.saveToCloud(window.currentState);
+                }
+            }, (error) => {
+                console.error("DB Error:", error);
+                alert("Ошибка доступа к данным. Проверьте подключение.");
+            });
+        };
+
+        window.saveToCloud = async (state) => {
+            if (!window.familyId) return;
+            window.isSaving = true;
+            
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'families', window.familyId);
+            const statusDot = document.getElementById('status-dot');
+            if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
+
+            try {
+                await setDoc(docRef, { state: state, lastUpdated: new Date().toISOString() }, { merge: true });
+                if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-green-500";
+            } catch(e) { 
+                console.error("Save Error:", e); 
+                if(statusDot) statusDot.className = "w-2 h-2 rounded-full bg-red-500";
+            } finally { 
+                setTimeout(() => window.isSaving = false, 500); 
+            }
+        };
+
+        initAuth();
+    </script>
+
+    <script>
+        // --- UI & LOGIC ---
+        
         let chartInstance = null;
 
-        // --- AUTH & SETUP ---
-        
+        // Login Handler
         window.handleLoginClick = () => {
             const name = document.getElementById('login-name').value.trim();
             const family = document.getElementById('login-family').value.trim();
-            
             if(name && family) {
-                performLogin(name, family);
-                // Cache for next time
+                window.performLogin(name, family);
                 localStorage.setItem('fin_user_name', name);
                 localStorage.setItem('fin_family_id', family);
             } else {
@@ -440,26 +458,23 @@
             window.userName = name;
             window.familyId = family;
             
-            // Hide Overlay
+            // UI Transition
             const overlay = document.getElementById('auth-overlay');
             const app = document.getElementById('app-container');
             
-            overlay.style.opacity = '0';
-            setTimeout(() => {
-                overlay.classList.add('hidden');
-                app.classList.remove('blur-sm', 'opacity-0');
-            }, 500);
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 500);
+            
+            app.classList.remove('blur-sm', 'opacity-0', 'pointer-events-none');
 
-            // Update Header
+            // Set User Info
             document.getElementById('user-name-display').innerText = name;
             document.getElementById('user-avatar').innerText = name.charAt(0).toUpperCase();
             document.getElementById('family-badge').innerText = family;
             document.getElementById('date-display').innerText = new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-            // Connect to DB
-            if(window.connectToFamilyDB) {
-                window.connectToFamilyDB(family);
-            }
+            // Connect
+            window.connectToFamilyDB(family);
         };
 
         window.logout = () => {
@@ -468,23 +483,20 @@
             location.reload();
         };
 
-        // --- SYNC HANDLER ---
+        // Sync Handler
         window.syncState = (newState) => {
-            console.log("Syncing...", newState);
-            currentState = newState;
-            // Defaults
-            if (!currentState.incomes) currentState.incomes = [];
-            if (!currentState.expenses) currentState.expenses = [];
-            if (!currentState.goals) currentState.goals = [];
-            if (!currentState.messages) currentState.messages = [];
-            
+            window.currentState = newState;
+            // Arrays check
+            ['incomes', 'expenses', 'goals', 'messages'].forEach(k => {
+                if (!window.currentState[k]) window.currentState[k] = [];
+            });
             renderAll();
         };
 
-        // --- RENDERING ---
+        // --- RENDER FUNCTIONS ---
 
         function renderAll() {
-            renderList('income-list', currentState.incomes, (item, idx) => `
+            renderList('income-list', window.currentState.incomes, (item, idx) => `
                 <div class="group flex items-center justify-between bg-white/60 hover:bg-white p-3 rounded-xl border border-transparent hover:border-green-200 transition-all shadow-sm animate-enter" style="animation-delay: ${idx * 50}ms">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
@@ -504,7 +516,7 @@
                 </div>
             `);
 
-            renderList('expense-list', currentState.expenses, (item, idx) => `
+            renderList('expense-list', window.currentState.expenses, (item, idx) => `
                 <div class="group flex items-center justify-between bg-white/60 hover:bg-white p-3 rounded-xl border border-transparent hover:border-red-200 transition-all shadow-sm animate-enter" style="animation-delay: ${idx * 50}ms">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
@@ -526,7 +538,7 @@
                 </div>
             `);
 
-            renderList('goal-list', currentState.goals, (item, idx) => `
+            renderList('goal-list', window.currentState.goals, (item, idx) => `
                 <div class="group flex items-center justify-between bg-white/60 p-3 rounded-xl border border-transparent hover:border-blue-200 shadow-sm transition-all animate-enter">
                     <div class="flex items-center gap-3 flex-1">
                         <div class="relative">
@@ -556,13 +568,11 @@
 
         function renderChat() {
             const el = document.getElementById('chat-messages');
-            if(currentState.messages.length === 0) {
+            if(window.currentState.messages.length === 0) {
                 el.innerHTML = '<div class="text-center py-10 text-xs text-gray-400">Начните обсуждение бюджета...</div>';
                 return;
             }
-            
-            const sorted = [...currentState.messages].sort((a,b) => a.timestamp - b.timestamp);
-            
+            const sorted = [...window.currentState.messages].sort((a,b) => a.timestamp - b.timestamp);
             el.innerHTML = sorted.map(msg => {
                 const isMe = msg.author === window.userName;
                 const time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -580,16 +590,14 @@
 
         // --- ACTIONS ---
 
-        function toggleForm(type) {
-            document.getElementById(`form-${type}`).classList.toggle('hidden');
-        }
+        window.toggleForm = (type) => document.getElementById(`form-${type}`).classList.toggle('hidden');
 
         window.addIncome = () => {
             const name = document.getElementById('inc-name').value;
             const amount = parseFloat(document.getElementById('inc-amount').value);
             const type = document.getElementById('inc-type').value;
             if(name && amount) {
-                currentState.incomes.push({ id: Date.now(), name, amount, type, author: window.userName });
+                window.currentState.incomes.push({ id: Date.now(), name, amount, type, author: window.userName });
                 clearInputs(['inc-name', 'inc-amount']);
                 toggleForm('income');
                 triggerSave();
@@ -601,7 +609,7 @@
             const amount = parseFloat(document.getElementById('exp-amount').value);
             const duration = parseInt(document.getElementById('exp-duration').value) || 12;
             if(name && amount) {
-                currentState.expenses.push({ id: Date.now(), name, amount, duration, author: window.userName });
+                window.currentState.expenses.push({ id: Date.now(), name, amount, duration, author: window.userName });
                 clearInputs(['exp-name', 'exp-amount']);
                 toggleForm('expense');
                 triggerSave();
@@ -612,7 +620,7 @@
             const name = document.getElementById('goal-name').value;
             const cost = parseFloat(document.getElementById('goal-cost').value);
             if(name && cost) {
-                currentState.goals.push({ id: Date.now(), name, cost, active: true, author: window.userName });
+                window.currentState.goals.push({ id: Date.now(), name, cost, active: true, author: window.userName });
                 clearInputs(['goal-name', 'goal-cost']);
                 toggleForm('goal');
                 triggerSave();
@@ -621,23 +629,22 @@
 
         window.removeItem = (type, idx) => {
             if(confirm('Удалить?')) {
-                currentState[type].splice(idx, 1);
+                window.currentState[type].splice(idx, 1);
                 triggerSave();
             }
         };
 
         window.toggleGoal = (idx) => {
-            currentState.goals[idx].active = !currentState.goals[idx].active;
+            window.currentState.goals[idx].active = !window.currentState.goals[idx].active;
             triggerSave();
         };
 
-        // Chat
         window.handleChatKey = (e) => { if(e.key === 'Enter') sendMessage(); };
         window.sendMessage = () => {
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
             if(text) {
-                currentState.messages.push({
+                window.currentState.messages.push({
                     id: Date.now(), text, author: window.userName, timestamp: Date.now()
                 });
                 input.value = '';
@@ -646,7 +653,7 @@
         };
 
         function triggerSave() {
-            if(window.saveToCloud) window.saveToCloud(currentState);
+            if(window.saveToCloud) window.saveToCloud(window.currentState);
         }
 
         // --- MATH & CHARTS ---
@@ -668,13 +675,13 @@
                 labels.push(date.toLocaleDateString('ru-RU', { month: 'short' }));
 
                 let monthlyInc = 0;
-                currentState.incomes.forEach(inc => {
+                window.currentState.incomes.forEach(inc => {
                     if (inc.type === 'monthly') monthlyInc += inc.amount;
                     else if (inc.type === 'once' && i === 0) monthlyInc += inc.amount;
                 });
 
                 let monthlyExp = 0;
-                currentState.expenses.forEach(exp => {
+                window.currentState.expenses.forEach(exp => {
                     if (i < exp.duration) monthlyExp += exp.amount;
                 });
 
@@ -686,7 +693,7 @@
             }
 
             // Stats
-            const goalsCost = currentState.goals.filter(g => g.active).reduce((s, g) => s + g.cost, 0);
+            const goalsCost = window.currentState.goals.filter(g => g.active).reduce((s, g) => s + g.cost, 0);
             
             document.getElementById('global-balance').innerText = formatMoney(currentBalance - goalsCost);
             document.getElementById('stat-end-balance').innerText = formatMoney(currentBalance);
@@ -765,7 +772,6 @@
         function formatMoney(num) {
             return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(num);
         }
-
     </script>
 </body>
 </html>
