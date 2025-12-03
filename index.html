@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Финансы 2026</title>
+    <title>Финансы 2026: Расширенный</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -27,59 +27,56 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         let userId = null;
-        let unsubscribeSnapshot = null;
 
-        // Auth Init
         const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
             }
         };
-        initAuth();
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 userId = user.uid;
-                loadData();
+                startRealtimeListener();
             }
         });
 
-        function loadData() {
+        function startRealtimeListener() {
             if (!userId) return;
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'financial_data', 'main_plan');
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'financial_plan_v2');
             
-            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+            onSnapshot(docRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    if (data.state && !window.isSaving) { // Don't overwrite if currently saving
+                    if (data.state && !window.isSaving) {
                         window.updateStateFromRemote(data.state);
                     }
                 }
             });
         }
 
-        // Global save function
         window.saveDataToFirebase = async (state) => {
-            if (!userId) {
-                console.error("No user ID found, cannot save.");
-                return;
-            }
+            if (!userId) return;
             window.isSaving = true;
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'financial_data', 'main_plan');
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'financial_plan_v2');
             try {
                 await setDoc(docRef, { state: state, lastUpdated: new Date() }, { merge: true });
-                console.log("Data saved successfully");
             } catch (e) {
-                console.error("Error saving document: ", e);
+                console.error("Save error:", e);
             } finally {
-                window.isSaving = false;
+                setTimeout(() => { window.isSaving = false; }, 500);
             }
         };
+
+        initAuth();
     </script>
 
-    <!-- Apple-style CSS -->
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -88,7 +85,6 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Glassmorphism */
         .ios-card {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(20px);
@@ -113,7 +109,6 @@
             outline: none;
         }
         
-        /* Sliders */
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -137,36 +132,22 @@
             border-radius: 2px;
         }
 
-        /* Toggles */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #007AFF;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #007AFF;
-        }
+        .toggle-checkbox:checked { right: 0; border-color: #007AFF; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #007AFF; }
         
-        /* Scrollbar */
         .custom-scroll::-webkit-scrollbar { width: 6px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background-color: #D1D1D6; border-radius: 3px; }
 
-        .chart-container {
-            position: relative;
-            width: 100%;
-            height: 320px;
-        }
+        .chart-container { position: relative; width: 100%; height: 320px; }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
     </style>
 </head>
-<body class="pb-12 text-sm sm:text-base">
+<body class="pb-12 text-sm sm:text-base opacity-0 transition-opacity duration-500" onload="document.body.style.opacity='1'">
 
-    <!-- Sticky Header -->
+    <!-- Header -->
     <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200/50 pt-[env(safe-area-inset-top)] transition-all duration-200">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -174,190 +155,147 @@
                     <h1 class="text-lg sm:text-xl font-bold tracking-tight">Финансы 2026</h1>
                     <div class="flex items-center gap-1">
                         <p class="text-xs text-gray-500 font-medium">Улан-Удэ</p>
-                        <span id="auto-save-dot" class="w-2 h-2 rounded-full bg-gray-300 ml-1 transition-colors duration-300" title="Статус сохранения"></span>
+                        <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-300 ml-1 transition-colors duration-300"></span>
                     </div>
                 </div>
             </div>
             
             <div class="flex items-center gap-4">
-                <!-- Manual Save Button -->
                 <button onclick="forceSave()" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-all flex items-center gap-1 active:scale-95">
                     <span id="save-btn-text">Сохранить</span>
-                    <svg id="save-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
                 </button>
-
-                <div class="text-right border-l border-gray-200 pl-4 hidden sm:block">
-                    <div class="text-[10px] text-gray-400 uppercase font-semibold tracking-wider">Поток</div>
-                    <div id="header-balance" class="text-xl font-bold text-blue-600 tracking-tight">0 ₽</div>
-                </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        <!-- LEFT COLUMN: Inputs -->
+        <!-- LEFT COLUMN -->
         <div class="lg:col-span-5 space-y-6">
 
-            <!-- 1. Income Section -->
+            <!-- 1. Income -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-bold">Доходы</h2>
                     <span id="total-income-display" class="text-sm font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-lg">108 000 ₽</span>
                 </div>
-                
-                <div id="income-list" class="space-y-3 mb-4">
-                    <!-- Incomes injected here -->
-                </div>
-
-                <button onclick="toggleAddIncome()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
-                    + Добавить источник
-                </button>
-                
+                <div id="income-list" class="space-y-3 mb-4"></div>
+                <button onclick="toggleAddIncome()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">+ Источник</button>
                 <div id="add-income-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
-                    <input type="text" id="new-income-name" placeholder="Название (напр. Премия)" class="ios-input bg-white">
+                    <input type="text" id="new-income-name" placeholder="Название" class="ios-input bg-white">
                     <input type="number" id="new-income-amount" placeholder="Сумма" class="ios-input bg-white">
                     <div class="flex space-x-2 pt-1">
-                        <button onclick="addIncome()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700">ОК</button>
-                        <button onclick="toggleAddIncome()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300">Отмена</button>
+                        <button onclick="addIncome()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">ОК</button>
+                        <button onclick="toggleAddIncome()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
                     </div>
                 </div>
             </section>
 
-            <!-- 2. Expenses Section -->
+            <!-- 2. Expenses -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.2s;">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-lg font-bold">Расходы (в месяц)</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Расходы</h2>
                     <span id="total-expense-display" class="text-sm font-semibold text-gray-500">0 ₽</span>
                 </div>
 
-                <div class="space-y-6">
+                <!-- Fixed Sliders -->
+                <div class="space-y-6 mb-6">
                     <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium">🛒 Продукты и быт</span>
-                            <span id="val-food" class="text-gray-600 font-semibold">35 000 ₽</span>
-                        </div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">🛒 Продукты и быт</span><span id="val-food" class="text-gray-600 font-semibold">35 000 ₽</span></div>
                         <input type="range" min="15000" max="60000" step="1000" value="35000" id="input-food" class="accent-blue-500">
                     </div>
-
                     <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium text-red-500">🔥 Дом (Отопление/Свет)</span>
-                            <span id="val-utilities" class="text-gray-600 font-semibold">15 000 ₽</span>
-                        </div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-medium text-red-500">🔥 Дом (Отопление)</span><span id="val-utilities" class="text-gray-600 font-semibold">15 000 ₽</span></div>
                         <input type="range" min="3000" max="35000" step="500" value="15000" id="input-utilities" class="accent-red-500">
                     </div>
-
                     <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium">👶 Ребенок (2 года)</span>
-                            <span id="val-child" class="text-gray-600 font-semibold">10 000 ₽</span>
-                        </div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">👶 Ребенок</span><span id="val-child" class="text-gray-600 font-semibold">10 000 ₽</span></div>
                         <input type="range" min="5000" max="30000" step="1000" value="10000" id="input-child" class="accent-blue-500">
                     </div>
-
                     <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium">👕 Одежда</span>
-                            <span id="val-clothes" class="text-gray-600 font-semibold">5 000 ₽</span>
-                        </div>
-                        <input type="range" min="0" max="20000" step="500" value="5000" id="input-clothes" class="accent-blue-500">
-                    </div>
-                    
-                    <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium">💊 Здоровье</span>
-                            <span id="val-health" class="text-gray-600 font-semibold">3 000 ₽</span>
-                        </div>
-                        <input type="range" min="0" max="20000" step="500" value="3000" id="input-health" class="accent-blue-500">
-                    </div>
-
-                    <div>
-                        <div class="flex justify-between text-sm mb-2">
-                            <span class="font-medium">🚗 Прочее / Транспорт</span>
-                            <span id="val-misc" class="text-gray-600 font-semibold">7 000 ₽</span>
-                        </div>
+                        <div class="flex justify-between text-sm mb-2"><span class="font-medium">🚗 Прочее</span><span id="val-misc" class="text-gray-600 font-semibold">7 000 ₽</span></div>
                         <input type="range" min="2000" max="25000" step="500" value="7000" id="input-misc" class="accent-blue-500">
+                    </div>
+                </div>
+
+                <!-- Custom Expenses List -->
+                <div class="border-t border-gray-100 pt-4">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-3">Дополнительные траты</h3>
+                    <div id="custom-expenses-list" class="space-y-3 mb-4"></div>
+                    
+                    <button onclick="toggleAddExpense()" class="w-full py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">+ Добавить расход</button>
+                    
+                    <div id="add-expense-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
+                        <input type="text" id="new-exp-name" placeholder="Название (напр. Кредит)" class="ios-input bg-white">
+                        <div class="flex space-x-2">
+                            <input type="number" id="new-exp-amount" placeholder="Сумма" class="ios-input bg-white w-2/3">
+                            <input type="number" id="new-exp-duration" placeholder="Мес" value="12" class="ios-input bg-white w-1/3 text-center" title="Длительность в месяцах (1-12)">
+                        </div>
+                        <p class="text-[10px] text-gray-400 pl-1">Укажите "12" для постоянного расхода, или меньше для временного (кредит, рассрочка).</p>
+                        <div class="flex space-x-2 pt-1">
+                            <button onclick="addCustomExpense()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">Добавить</button>
+                            <button onclick="toggleAddExpense()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- 3. Goals Section (Fixed for Mobile) -->
+            <!-- 3. Goals -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.3s;">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-bold">Цели</h2>
-                    <button onclick="toggleAddGoal()" class="text-blue-600 text-sm font-semibold hover:opacity-70">+ Добавить</button>
+                    <button onclick="toggleAddGoal()" class="text-blue-600 text-sm font-semibold hover:opacity-70">+ Цель</button>
                 </div>
-                
-                <!-- FIX: max-h-none on mobile ensures full expansion -->
-                <div id="goals-list" class="space-y-3 custom-scroll max-h-none lg:max-h-[300px] lg:overflow-y-auto pr-1">
-                    <!-- Goals injected here -->
-                </div>
-
+                <div id="goals-list" class="space-y-3 custom-scroll max-h-none lg:max-h-[300px] lg:overflow-y-auto pr-1"></div>
                 <div id="add-goal-form" class="hidden mt-3 p-3 bg-gray-50 rounded-xl space-y-2">
                     <input type="text" id="new-goal-name" placeholder="Название цели" class="ios-input bg-white">
                     <input type="number" id="new-goal-cost" placeholder="Стоимость" class="ios-input bg-white">
                     <div class="flex space-x-2 pt-1">
-                        <button onclick="addGoal()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-700">ОК</button>
-                        <button onclick="toggleAddGoal()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300">Отмена</button>
+                        <button onclick="addGoal()" class="flex-1 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">ОК</button>
+                        <button onclick="toggleAddGoal()" class="flex-1 bg-gray-200 text-gray-600 text-sm font-semibold py-2 rounded-lg">Отмена</button>
                     </div>
                 </div>
             </section>
 
         </div>
 
-        <!-- RIGHT COLUMN: Analytics -->
+        <!-- RIGHT COLUMN -->
         <div class="lg:col-span-7 space-y-6">
 
-            <!-- Main Analytics Card -->
+            <!-- Chart -->
             <section class="ios-card p-6 animate-fade-in" style="animation-delay: 0.1s;">
-                <h2 class="text-lg font-bold mb-1">Прогноз на 2026</h2>
-                <p class="text-sm text-gray-500 mb-6">Динамика накоплений vs Стоимость целей</p>
-                
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold mb-1">Прогноз 2026</h2>
+                        <p class="text-sm text-gray-500">Динамика накоплений</p>
+                    </div>
+                    <div class="text-right">
+                         <div class="text-[10px] text-gray-400 uppercase font-semibold">Средний поток</div>
+                         <div id="avg-flow-display" class="text-lg font-bold text-blue-600">0 ₽</div>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="mainChart"></canvas>
                 </div>
-
-                <div class="mt-6 bg-blue-50/50 rounded-xl p-5 border border-blue-100">
-                    <div class="flex items-start">
-                        <div class="flex-shrink-0 bg-blue-100 rounded-full p-2 mr-3">
-                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        </div>
-                        <div>
-                            <h4 class="text-sm font-bold text-blue-900 mb-1">Анализ ситуации</h4>
-                            <p id="analysis-text" class="text-sm text-blue-800 leading-relaxed opacity-90">Загрузка данных...</p>
-                        </div>
-                    </div>
+                <div class="mt-4 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                    <h4 class="text-sm font-bold text-blue-900 mb-1">Вердикт</h4>
+                    <p id="analysis-text" class="text-sm text-blue-800 opacity-90">Загрузка...</p>
                 </div>
             </section>
 
-            <!-- Secondary Grid -->
+            <!-- Stats -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in" style="animation-delay: 0.2s;">
-                
                 <div class="ios-card p-6 flex flex-col items-center">
-                    <h3 class="text-sm font-semibold text-gray-500 mb-4 w-full text-left">Структура расходов</h3>
-                    <div style="height: 180px; width: 100%;">
-                        <canvas id="doughnutChart"></canvas>
-                    </div>
+                    <h3 class="text-sm font-semibold text-gray-500 mb-4 w-full text-left">Структура (Январь)</h3>
+                    <div style="height: 180px; width: 100%;"><canvas id="doughnutChart"></canvas></div>
                 </div>
-
                 <div class="ios-card p-6 flex flex-col justify-center space-y-4">
-                    <div>
-                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Остаток за год</div>
-                        <div id="year-savings-val" class="text-2xl font-bold text-gray-900">0 ₽</div>
-                    </div>
+                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Накопления за год</div><div id="year-savings-val" class="text-2xl font-bold text-gray-900">0 ₽</div></div>
                     <div class="w-full h-px bg-gray-100"></div>
-                    <div>
-                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Все цели (сумма)</div>
-                        <div id="goals-cost-val" class="text-2xl font-bold text-gray-900">0 ₽</div>
-                    </div>
+                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Стоимость целей</div><div id="goals-cost-val" class="text-2xl font-bold text-gray-900">0 ₽</div></div>
                     <div class="w-full h-px bg-gray-100"></div>
-                    <div>
-                        <div class="text-xs text-gray-400 font-medium uppercase mb-1">Итоговый баланс</div>
-                        <div id="final-balance-val" class="text-2xl font-bold">0 ₽</div>
-                    </div>
+                    <div><div class="text-xs text-gray-400 font-medium uppercase mb-1">Баланс</div><div id="final-balance-val" class="text-2xl font-bold">0 ₽</div></div>
                 </div>
-
             </div>
 
         </div>
@@ -365,461 +303,382 @@
     </main>
 
     <script>
-        // --- LOCAL STATE & LOGIC ---
+        // --- STATE ---
         let state = {
             incomes: [
                 { id: 'inc1', name: 'Зарплата', amount: 90000 },
                 { id: 'inc2', name: 'Детские', amount: 18000 }
             ],
-            expenses: {
+            expenses: { // Fixed sliders
                 food: 35000,
                 utilities: 15000,
                 child: 10000,
-                clothes: 5000,
-                health: 3000,
                 misc: 7000
             },
+            customExpenses: [], // New Array: {id, name, amount, duration}
             goals: [
-                { id: 'electricity', name: '⚡ 3 Фазы (Свет)', cost: 55000, active: true, color: '#007AFF' },
+                { id: 'electricity', name: '⚡ Свет (3 фазы)', cost: 55000, active: true, color: '#007AFF' },
                 { id: 'sewage', name: '💧 Канализация', cost: 120000, active: true, color: '#5856D6' },
-                { id: 'bathroom', name: '🛁 Ванная', cost: 150000, active: true, color: '#34C759' },
                 { id: 'walls', name: '🧱 Ремонт стен', cost: 60000, active: true, color: '#FF9500' },
                 { id: 'car', name: '🚗 Машина', cost: 650000, active: true, color: '#FF3B30' }
             ]
         };
 
-        let isRemoteUpdate = false;
+        window.isSaving = false;
         let saveTimeout = null;
         let mainChart = null;
         let doughnutChart = null;
 
         const els = {
             incomesList: document.getElementById('income-list'),
+            customExpensesList: document.getElementById('custom-expenses-list'),
+            goalsList: document.getElementById('goals-list'),
             totalIncome: document.getElementById('total-income-display'),
             totalExpense: document.getElementById('total-expense-display'),
-            goalsList: document.getElementById('goals-list'),
-            headerBalance: document.getElementById('header-balance'),
+            avgFlow: document.getElementById('avg-flow-display'),
             yearSavings: document.getElementById('year-savings-val'),
             goalsCost: document.getElementById('goals-cost-val'),
             finalBalance: document.getElementById('final-balance-val'),
             analysisText: document.getElementById('analysis-text'),
-            autoSaveDot: document.getElementById('auto-save-dot'),
-            saveBtn: document.getElementById('save-btn'),
             saveBtnText: document.getElementById('save-btn-text'),
+            syncDot: document.getElementById('sync-dot'),
             inputs: {
                 food: document.getElementById('input-food'),
                 utilities: document.getElementById('input-utilities'),
                 child: document.getElementById('input-child'),
-                clothes: document.getElementById('input-clothes'),
-                health: document.getElementById('input-health'),
                 misc: document.getElementById('input-misc'),
             },
             displays: {
                 food: document.getElementById('val-food'),
                 utilities: document.getElementById('val-utilities'),
                 child: document.getElementById('val-child'),
-                clothes: document.getElementById('val-clothes'),
-                health: document.getElementById('val-health'),
                 misc: document.getElementById('val-misc'),
             }
         };
 
-        // Exposed for Firebase
-        window.isSaving = false;
-        window.getCurrentState = () => state;
-        
+        // --- CORE FUNCTIONS ---
+
         window.updateStateFromRemote = (newState) => {
             if (!newState) return;
-            console.log("Applying remote state...");
-            isRemoteUpdate = true;
             state = newState;
+            // Ensure customExpenses exists (migration)
+            if (!state.customExpenses) state.customExpenses = [];
             
-            // Sync Input Values
+            // Sync UI
             Object.keys(state.expenses).forEach(key => {
                 if(els.inputs[key]) {
                     els.inputs[key].value = state.expenses[key];
                     if(els.displays[key]) els.displays[key].innerText = formatCurrency(state.expenses[key]);
                 }
             });
-            
-            init();
-            isRemoteUpdate = false;
-            
-            // UI Feedback
-            els.autoSaveDot.classList.remove('bg-gray-300', 'bg-yellow-400');
-            els.autoSaveDot.classList.add('bg-green-500'); // Synced
+            renderAll();
+            indicateSync('green');
         };
 
         function init() {
-            renderIncomes();
-            renderGoals();
-            setupExpenseListeners(); 
-            updateAll();
+            renderAll();
+            setupSliderListeners();
         }
 
-        // --- SAVE LOGIC ---
-        
-        // 1. Auto-save (debounced)
         function triggerAutoSave() {
-            if (isRemoteUpdate) return;
-            
-            // Show yellow dot (pending)
-            els.autoSaveDot.classList.remove('bg-gray-300', 'bg-green-500');
-            els.autoSaveDot.classList.add('bg-yellow-400');
-
+            indicateSync('yellow');
             if (saveTimeout) clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
                 if (window.saveDataToFirebase) {
-                    window.saveDataToFirebase(state).then(() => {
-                        els.autoSaveDot.classList.remove('bg-yellow-400');
-                        els.autoSaveDot.classList.add('bg-green-500');
-                    });
+                    window.saveDataToFirebase(state).then(() => indicateSync('green'));
                 }
-            }, 2000); // 2 seconds delay
+            }, 1000);
         }
 
-        // 2. Manual Save (Button)
         window.forceSave = () => {
             if (window.saveDataToFirebase) {
-                const btn = els.saveBtn;
-                const txt = els.saveBtnText;
-                
-                // Loading State
-                btn.classList.add('opacity-75', 'cursor-not-allowed');
-                txt.innerText = 'Сохр...';
-                
+                els.saveBtnText.innerText = 'Запись...';
                 window.saveDataToFirebase(state).then(() => {
-                    // Success State
-                    txt.innerText = 'Сохранено';
-                    els.autoSaveDot.classList.remove('bg-yellow-400', 'bg-gray-300');
-                    els.autoSaveDot.classList.add('bg-green-500');
-                    
-                    setTimeout(() => {
-                        txt.innerText = 'Сохранить';
-                        btn.classList.remove('opacity-75', 'cursor-not-allowed');
-                    }, 1500);
+                    els.saveBtnText.innerText = 'Готово';
+                    indicateSync('green');
+                    setTimeout(() => els.saveBtnText.innerText = 'Сохранить', 1500);
                 });
-            } else {
-                alert("Ошибка подключения к базе данных. Попробуйте обновить страницу.");
             }
         };
 
-        // --- UI RENDERING ---
+        function indicateSync(color) {
+            els.syncDot.className = `w-2 h-2 rounded-full ml-1 transition-colors duration-300 ${color === 'yellow' ? 'bg-yellow-400' : 'bg-green-500'}`;
+        }
+
+        function renderAll() {
+            renderIncomes();
+            renderCustomExpenses();
+            renderGoals();
+            calculateAndDraw();
+        }
+
+        // --- RENDERERS ---
 
         function renderIncomes() {
             els.incomesList.innerHTML = '';
             state.incomes.forEach((inc, idx) => {
-                const div = document.createElement('div');
-                div.className = "flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm";
-                div.innerHTML = `
-                    <div class="flex-1">
-                        <div class="text-xs text-gray-400 font-medium uppercase">${inc.name}</div>
-                        <input type="number" value="${inc.amount}" onchange="updateIncome(${idx}, this.value)" 
-                            class="font-semibold text-gray-800 w-full focus:outline-none bg-transparent">
-                    </div>
-                    <button onclick="removeIncome(${idx})" class="text-gray-300 hover:text-red-500 transition-colors ml-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                `;
-                els.incomesList.appendChild(div);
+                els.incomesList.innerHTML += `
+                    <div class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                        <div class="flex-1">
+                            <div class="text-xs text-gray-400 font-medium uppercase">${inc.name}</div>
+                            <input type="number" value="${inc.amount}" onchange="updateIncome(${idx}, this.value)" class="font-semibold text-gray-800 w-full focus:outline-none bg-transparent">
+                        </div>
+                        <button onclick="removeIncome(${idx})" class="text-gray-300 hover:text-red-500 ml-2">×</button>
+                    </div>`;
+            });
+        }
+
+        function renderCustomExpenses() {
+            els.customExpensesList.innerHTML = '';
+            if (state.customExpenses.length === 0) {
+                els.customExpensesList.innerHTML = '<p class="text-xs text-gray-400 italic">Нет дополнительных расходов</p>';
+                return;
+            }
+            state.customExpenses.forEach((exp, idx) => {
+                const isTemp = exp.duration < 12;
+                const badge = isTemp ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-2">${exp.duration} мес</span>` : '';
+                els.customExpensesList.innerHTML += `
+                    <div class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                        <div class="flex-1">
+                            <div class="flex items-center">
+                                <span class="text-sm font-medium text-gray-700">${exp.name}</span>
+                                ${badge}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" value="${exp.amount}" onchange="updateCustomExp(${idx}, 'amount', this.value)" class="text-xs font-semibold text-gray-500 w-16 focus:outline-none bg-transparent border-b border-transparent focus:border-blue-300">
+                                <span class="text-xs text-gray-400">₽</span>
+                            </div>
+                        </div>
+                        <button onclick="removeCustomExp(${idx})" class="text-gray-300 hover:text-red-500 ml-2">×</button>
+                    </div>`;
             });
         }
 
         function renderGoals() {
             els.goalsList.innerHTML = '';
             state.goals.forEach((goal, idx) => {
-                const div = document.createElement('div');
-                div.className = "flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm";
-                const toggleId = `toggle-${idx}`;
-                div.innerHTML = `
-                    <div class="flex items-center flex-1 mr-4">
-                        <div class="relative inline-block w-10 mr-3 align-middle select-none transition duration-200 ease-in">
-                            <input type="checkbox" name="${toggleId}" id="${toggleId}" ${goal.active ? 'checked' : ''} 
-                                class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 left-0 top-0 transition-all duration-300"
-                                onchange="toggleGoal(${idx}, this.checked)">
-                            <label for="${toggleId}" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer transition-colors duration-300"></label>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm font-medium text-gray-900 truncate" title="${goal.name}">${goal.name}</div>
-                            <div class="flex items-baseline text-xs text-gray-500">
-                                <input type="number" value="${goal.cost}" onchange="updateGoalCost(${idx}, this.value)" 
-                                    class="w-20 bg-transparent focus:outline-none focus:text-blue-600 focus:font-bold border-b border-transparent focus:border-blue-200 transition-colors">
-                                <span class="ml-1">₽</span>
+                const id = `goal-${idx}`;
+                els.goalsList.innerHTML += `
+                    <div class="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+                        <div class="flex items-center flex-1 mr-2">
+                            <input type="checkbox" ${goal.active ? 'checked' : ''} onchange="toggleGoal(${idx}, this.checked)" class="toggle-checkbox w-5 h-5 rounded-full border-gray-300 text-blue-600 mr-3">
+                            <div class="min-w-0">
+                                <div class="text-sm font-medium truncate">${goal.name}</div>
+                                <input type="number" value="${goal.cost}" onchange="updateGoalCost(${idx}, this.value)" class="text-xs text-gray-500 w-20 bg-transparent focus:outline-none">
                             </div>
                         </div>
-                    </div>
-                    <button onclick="removeGoal(${idx})" class="text-gray-300 hover:text-red-400 ml-1 font-bold text-lg">×</button>
-                `;
-                els.goalsList.appendChild(div);
+                        <button onclick="removeGoal(${idx})" class="text-gray-300 hover:text-red-400">×</button>
+                    </div>`;
             });
         }
 
-        // --- USER ACTIONS ---
+        // --- ACTIONS ---
 
-        window.updateIncome = (idx, val) => {
-            state.incomes[idx].amount = parseInt(val) || 0;
-            updateAll();
-            triggerAutoSave();
-        };
-
-        window.removeIncome = (idx) => {
-            state.incomes.splice(idx, 1);
-            renderIncomes();
-            updateAll();
-            triggerAutoSave();
-        };
-
-        window.toggleAddIncome = () => {
-            document.getElementById('add-income-form').classList.toggle('hidden');
-        };
-
+        // Incomes
+        window.updateIncome = (idx, val) => { state.incomes[idx].amount = parseInt(val) || 0; renderAll(); triggerAutoSave(); };
+        window.removeIncome = (idx) => { state.incomes.splice(idx, 1); renderAll(); triggerAutoSave(); };
+        window.toggleAddIncome = () => document.getElementById('add-income-form').classList.toggle('hidden');
         window.addIncome = () => {
             const name = document.getElementById('new-income-name').value;
             const amount = parseInt(document.getElementById('new-income-amount').value);
             if(name && amount) {
                 state.incomes.push({ id: Date.now(), name, amount });
-                renderIncomes();
-                updateAll();
-                toggleAddIncome();
-                document.getElementById('new-income-name').value = '';
-                document.getElementById('new-income-amount').value = '';
-                triggerAutoSave();
+                renderAll(); toggleAddIncome(); triggerAutoSave();
             }
         };
 
-        function setupExpenseListeners() {
-            Object.keys(els.inputs).forEach(key => {
-                // Prevent duplicate listeners
-                const oldEl = els.inputs[key];
-                const newEl = oldEl.cloneNode(true);
-                oldEl.parentNode.replaceChild(newEl, oldEl);
-                els.inputs[key] = newEl;
+        // Custom Expenses
+        window.updateCustomExp = (idx, field, val) => { 
+            state.customExpenses[idx][field] = parseInt(val) || 0; 
+            renderAll(); triggerAutoSave(); 
+        };
+        window.removeCustomExp = (idx) => { state.customExpenses.splice(idx, 1); renderAll(); triggerAutoSave(); };
+        window.toggleAddExpense = () => document.getElementById('add-expense-form').classList.toggle('hidden');
+        window.addCustomExpense = () => {
+            const name = document.getElementById('new-exp-name').value;
+            const amount = parseInt(document.getElementById('new-exp-amount').value);
+            let duration = parseInt(document.getElementById('new-exp-duration').value);
+            if (!duration || duration > 12) duration = 12;
+            
+            if(name && amount) {
+                if (!state.customExpenses) state.customExpenses = [];
+                state.customExpenses.push({ id: Date.now(), name, amount, duration });
+                renderAll(); toggleAddExpense(); triggerAutoSave();
+            }
+        };
 
+        // Goals
+        window.toggleGoal = (idx, val) => { state.goals[idx].active = val; renderAll(); triggerAutoSave(); };
+        window.updateGoalCost = (idx, val) => { state.goals[idx].cost = parseInt(val) || 0; renderAll(); triggerAutoSave(); };
+        window.removeGoal = (idx) => { state.goals.splice(idx, 1); renderAll(); triggerAutoSave(); };
+        window.toggleAddGoal = () => document.getElementById('add-goal-form').classList.toggle('hidden');
+        window.addGoal = () => {
+            const name = document.getElementById('new-goal-name').value;
+            const cost = parseInt(document.getElementById('new-goal-cost').value);
+            if(name && cost) {
+                state.goals.push({ id: Date.now(), name, cost, active: true, color: '#999' });
+                renderAll(); toggleAddGoal(); triggerAutoSave();
+            }
+        };
+
+        function setupSliderListeners() {
+            Object.keys(els.inputs).forEach(key => {
                 els.inputs[key].addEventListener('input', (e) => {
                     state.expenses[key] = parseInt(e.target.value);
                     els.displays[key].innerText = formatCurrency(state.expenses[key]);
-                    updateAll();
-                    triggerAutoSave();
+                    renderAll(); triggerAutoSave();
                 });
                 els.displays[key].innerText = formatCurrency(state.expenses[key]);
             });
         }
 
-        window.toggleGoal = (idx, isActive) => {
-            state.goals[idx].active = isActive;
-            updateAll();
-            triggerAutoSave();
-        };
+        // --- CALCULATION LOGIC ---
 
-        window.updateGoalCost = (idx, val) => {
-            state.goals[idx].cost = parseInt(val) || 0;
-            updateAll();
-            triggerAutoSave();
-        };
+        function calculateAndDraw() {
+            const totalIncome = state.incomes.reduce((s, i) => s + i.amount, 0);
+            const fixedExpenses = Object.values(state.expenses).reduce((s, v) => s + v, 0);
+            
+            // Build Month-by-Month Savings
+            let monthlySavingsData = [];
+            let cumulativeSavings = 0;
+            let totalYearSavings = 0;
+            
+            // For Displaying "Current/Avg" Expense
+            let firstMonthExpense = fixedExpenses;
 
-        window.toggleAddGoal = () => {
-            document.getElementById('add-goal-form').classList.toggle('hidden');
-        };
+            for (let m = 0; m < 12; m++) {
+                // Base fixed expense
+                let monthExp = fixedExpenses;
+                
+                // Add variable custom expenses
+                if (state.customExpenses) {
+                    state.customExpenses.forEach(exp => {
+                        // If duration covers this month (0-indexed m)
+                        if (m < exp.duration) {
+                            monthExp += exp.amount;
+                        }
+                    });
+                }
+                
+                if (m === 0) firstMonthExpense = monthExp;
 
-        window.addGoal = () => {
-            const name = document.getElementById('new-goal-name').value;
-            const cost = parseInt(document.getElementById('new-goal-cost').value);
-            if(name && cost) {
-                state.goals.push({ 
-                    id: 'custom-' + Date.now(), 
-                    name, 
-                    cost, 
-                    active: true, 
-                    color: '#8E8E93' 
-                });
-                renderGoals();
-                updateAll();
-                toggleAddGoal();
-                document.getElementById('new-goal-name').value = '';
-                document.getElementById('new-goal-cost').value = '';
-                triggerAutoSave();
+                const monthSave = totalIncome - monthExp;
+                cumulativeSavings += monthSave;
+                
+                // Don't let cumulative drop below zero visually (optional, but cleaner chart)
+                // Actually, debt is real, so let it go negative or stay flat?
+                // Let's keep it real.
+                
+                monthlySavingsData.push(cumulativeSavings);
             }
-        };
-
-        window.removeGoal = (idx) => {
-            state.goals.splice(idx, 1);
-            renderGoals();
-            updateAll();
-            triggerAutoSave();
-        };
-
-        // --- MATH & CHARTS ---
-
-        function updateAll() {
-            const totalIncome = state.incomes.reduce((sum, item) => sum + item.amount, 0);
-            const totalExpense = Object.values(state.expenses).reduce((sum, val) => sum + val, 0);
-            const monthlySavings = totalIncome - totalExpense;
             
+            totalYearSavings = cumulativeSavings;
+
+            // UI Updates
             els.totalIncome.innerText = formatCurrency(totalIncome);
-            els.totalExpense.innerText = formatCurrency(totalExpense);
+            els.totalExpense.innerText = "~" + formatCurrency(firstMonthExpense); // Show Jan expense approx
             
-            els.headerBalance.innerText = formatCurrency(monthlySavings);
-            els.headerBalance.className = monthlySavings >= 0 
-                ? "text-xl font-bold text-blue-600 tracking-tight" 
-                : "text-xl font-bold text-red-500 tracking-tight";
+            // Avg Flow Calculation
+            const avgFlow = totalYearSavings / 12;
+            els.avgFlow.innerText = formatCurrency(avgFlow);
+            els.avgFlow.className = avgFlow > 0 ? "text-lg font-bold text-blue-600" : "text-lg font-bold text-red-500";
 
-            const yearSavings = monthlySavings * 12;
+            // Totals
             const activeGoals = state.goals.filter(g => g.active);
-            const goalsCost = activeGoals.reduce((sum, g) => sum + g.cost, 0);
-            const balance = yearSavings - goalsCost;
+            const goalsCost = activeGoals.reduce((s, g) => s + g.cost, 0);
+            const balance = totalYearSavings - goalsCost;
 
-            els.yearSavings.innerText = formatCurrency(yearSavings);
+            els.yearSavings.innerText = formatCurrency(totalYearSavings);
             els.goalsCost.innerText = formatCurrency(goalsCost);
             els.finalBalance.innerText = (balance > 0 ? "+" : "") + formatCurrency(balance);
             els.finalBalance.className = balance >= 0 ? "text-2xl font-bold text-green-500" : "text-2xl font-bold text-red-500";
 
-            generateAnalysis(monthlySavings, goalsCost, activeGoals, totalIncome);
-            updateCharts(monthlySavings, activeGoals, state.expenses);
+            updateAnalysis(balance, goalsCost, activeGoals, avgFlow);
+            updateCharts(monthlySavingsData, activeGoals, state.expenses, firstMonthExpense - fixedExpenses);
         }
 
-        function generateAnalysis(monthlySavings, goalsCost, activeGoals, totalIncome) {
-            const carGoal = activeGoals.find(g => g.id === 'car');
-            const carCost = carGoal ? carGoal.cost : 0;
-            
-            if (monthlySavings <= 0) {
-                els.analysisText.innerHTML = `Ваши расходы превышают доходы на <span class="font-bold text-red-600">${formatCurrency(Math.abs(monthlySavings))}</span>.`;
+        function updateAnalysis(balance, goalsCost, activeGoals, avgFlow) {
+            if (avgFlow <= 0) {
+                els.analysisText.innerHTML = "Ваш бюджет дефицитен. Расходы превышают доходы. Накопления невозможны.";
                 return;
             }
-
-            const monthsNeeded = goalsCost / monthlySavings;
-            let html = `При текущем свободном потоке (${formatCurrency(monthlySavings)}/мес), реализация всех целей займет <strong>${(monthsNeeded/12).toFixed(1)} года</strong> (или ${Math.ceil(monthsNeeded)} мес). `;
-
-            if (carGoal) {
-                const carShare = (carCost / goalsCost) * 100;
-                html += `<br><br>Автомобиль стоимостью <strong>${formatCurrency(carCost)}</strong> составляет ${Math.round(carShare)}% бюджета. `;
-                if (monthsNeeded > 12) {
-                    html += `В 2026 году лучше выполнить ремонт, а машину взять в кредит, если платеж меньше <strong>${formatCurrency(monthlySavings * 0.4)}</strong>.`;
-                } else {
-                    html += `Бюджет позволяет приобрести авто в конце года.`;
-                }
-            } else {
-                html += `<br><br>Без авто ремонт завершится за <strong>${Math.ceil((goalsCost - carCost)/monthlySavings)} мес</strong>.`;
+            if (balance >= 0) {
+                els.analysisText.innerHTML = "План выполним! К концу года у вас останется положительный баланс.";
+                return;
             }
             
-            els.analysisText.innerHTML = html;
+            // If deficit
+            const car = activeGoals.find(g => g.id === 'car');
+            if (car) {
+                 els.analysisText.innerHTML = `Накоплений не хватит на все цели (${formatCurrency(Math.abs(balance))} дефицит). Машина — главная нагрузка. Рассмотрите кредит или перенос покупки.`;
+            } else {
+                 els.analysisText.innerHTML = `Вам не хватает ${formatCurrency(Math.abs(balance))}. Попробуйте сократить временные расходы или разбить ремонт на этапы.`;
+            }
         }
 
-        function updateCharts(monthlySavings, activeGoals, expenses) {
+        function updateCharts(savingsData, activeGoals, expenses, customExpSumJan) {
             const ctxMain = document.getElementById('mainChart').getContext('2d');
             const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
-
             const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-            let savingsData = [];
-            let current = 0;
-            const effectiveSavings = monthlySavings > 0 ? monthlySavings : 0;
-            for(let i=0; i<12; i++) {
-                current += effectiveSavings;
-                savingsData.push(current);
-            }
 
-            let datasets = [
-                {
-                    label: 'Накопления',
-                    data: savingsData,
-                    borderColor: '#34C759',
-                    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-                    borderWidth: 3,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 0,
-                    order: 1
-                }
-            ];
+            // Line Chart
+            let datasets = [{
+                label: 'Накопления',
+                data: savingsData,
+                borderColor: '#34C759',
+                backgroundColor: 'rgba(52, 199, 89, 0.1)',
+                borderWidth: 3,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 0
+            }];
 
-            let runningGoalCost = 0;
+            let runningCost = 0;
             activeGoals.forEach(g => {
-                runningGoalCost += g.cost;
+                runningCost += g.cost;
                 datasets.push({
                     label: g.name,
-                    data: Array(12).fill(runningGoalCost),
-                    borderColor: g.color || '#8E8E93',
+                    data: Array(12).fill(runningCost),
+                    borderColor: g.color || '#999',
                     borderWidth: 2,
-                    borderDash: [6, 6],
+                    borderDash: [5, 5],
                     pointRadius: 0,
-                    fill: false,
-                    order: 2
+                    fill: false
                 });
             });
 
-            if (mainChart) {
-                mainChart.data.datasets = datasets;
-                mainChart.update();
-            } else {
-                mainChart = new Chart(ctxMain, {
-                    type: 'line',
-                    data: { labels, datasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: { mode: 'index', intersect: false },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: 'rgba(0,0,0,0.8)',
-                                titleFont: { family: '-apple-system', size: 13 },
-                                bodyFont: { family: '-apple-system', size: 13 },
-                                padding: 10,
-                                cornerRadius: 8,
-                                displayColors: true
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: '#E5E5EA', drawBorder: false },
-                                ticks: { font: { family: '-apple-system' }, color: '#8E8E93' }
-                            },
-                            x: {
-                                grid: { display: false },
-                                ticks: { font: { family: '-apple-system' }, color: '#8E8E93' }
-                            }
-                        }
-                    }
-                });
-            }
+            if (mainChart) mainChart.destroy();
+            mainChart = new Chart(ctxMain, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
 
-            const expLabels = ['Еда', 'Дом', 'Ребенок', 'Одежда', 'Здоровье', 'Прочее', 'Остаток'];
-            const expData = [
-                expenses.food, 
-                expenses.utilities, 
-                expenses.child, 
-                expenses.clothes, 
-                expenses.health, 
-                expenses.misc, 
-                effectiveSavings
-            ];
-            const expColors = ['#FF9500', '#FF3B30', '#5AC8FA', '#5856D6', '#AF52DE', '#8E8E93', '#34C759'];
+            // Doughnut (Jan Snapshot)
+            const expData = [expenses.food, expenses.utilities, expenses.child, expenses.misc, customExpSumJan];
+            const expLabels = ['Еда', 'Дом', 'Ребенок', 'Прочее', 'Доп. траты'];
+            const expColors = ['#60A5FA', '#F87171', '#34D399', '#A78BFA', '#FBBF24'];
 
-            if (doughnutChart) {
-                doughnutChart.data.datasets[0].data = expData;
-                doughnutChart.update();
-            } else {
-                doughnutChart = new Chart(ctxDoughnut, {
-                    type: 'doughnut',
-                    data: {
-                        labels: expLabels,
-                        datasets: [{
-                            data: expData,
-                            backgroundColor: expColors,
-                            borderWidth: 0,
-                            hoverOffset: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '70%',
-                        plugins: {
-                            legend: { display: false }
-                        }
-                    }
-                });
-            }
+            if (doughnutChart) doughnutChart.destroy();
+            doughnutChart = new Chart(ctxDoughnut, {
+                type: 'doughnut',
+                data: {
+                    labels: expLabels,
+                    datasets: [{ data: expData, backgroundColor: expColors, borderWidth: 0, hoverOffset: 4 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: { legend: { display: false } }
+                }
+            });
         }
 
         function formatCurrency(num) {
